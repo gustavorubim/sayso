@@ -11,6 +11,9 @@ const api: SttApi = {
     return () => ipcRenderer.removeListener('core:event', handler)
   },
   info: () => ipcRenderer.invoke('app:info'),
+  updateState: () => ipcRenderer.invoke('app:update-state'),
+  checkForUpdates: () => ipcRenderer.invoke('app:check-updates'),
+  installUpdate: () => ipcRenderer.send('app:install-update'),
   openExternal: (url: string) => ipcRenderer.send('app:open-external', url)
 } as SttApi
 

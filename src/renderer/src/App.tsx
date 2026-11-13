@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { DownloadProgress, HistoryItem, ModelInfo, Settings, Status } from '../../shared/types'
+import type { DownloadProgress, HistoryItem, ModelInfo, Settings, Status, UpdateState } from '../../shared/types'
 import { errorText } from './format'
 import { DictionaryPage } from './pages/Dictionary'
 import { HistoryPage } from './pages/History'
@@ -24,11 +24,47 @@ export interface AppState {
   status: Status
   progress: Record<string, DownloadProgress>
   engine: 'loading' | 'ready' | 'failed' | null
+  appUpdate: UpdateState
   /** Saves a settings change. Shows a notice and returns false if it is rejected. */
   update: (patch: Partial<Settings>) => Promise<boolean>
   refreshModels: () => Promise<void>
   notify: (message: string) => void
   go: (page: Page) => void
+}
+
+const RELEASES_URL = 'https://github.com/gustavorubim/shortcut-to-text/releases/latest'
+
+function UpdateNotice({ update }: { update: UpdateState }): React.JSX.Element | null {
+  if (update.state === 'none' || !update.version) return null
+  return (
+    <div className="update" role="status">
+      {update.state === 'ready' && (
+        <>
+          <p>Version {update.version} is ready to install.</p>
+          <button type="button" className="btn btn-primary" onClick={() => window.stt.installUpdate()}>
+            Restart to update
+          </button>
+        </>
+      )}
+      {update.state === 'downloading' && <p>Downloading version {update.version}…</p>}
+      {update.state === 'available' && (
+        <>
+          <p>Version {update.version} is available.</p>
+          <button type="button" className="btn btn-primary" onClick={() => window.stt.openExternal(RELEASES_URL)}>
+            Get the update
+          </button>
+        </>
+      )}
+      {update.state === 'error' && (
+        <>
+          <p>Version {update.version} could not be downloaded.</p>
+          <button type="button" className="btn" onClick={() => window.stt.openExternal(RELEASES_URL)}>
+            Download it by hand
+          </button>
+        </>
+      )}
+    </div>
+  )
 }
 
 export function App(): React.JSX.Element {
@@ -41,6 +77,7 @@ export function App(): React.JSX.Element {
   const [engine, setEngine] = useState<AppState['engine']>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [version, setVersion] = useState('')
+  const [appUpdate, setAppUpdate] = useState<UpdateState>({ state: 'none' })
   const noticeTimer = useRef<number | undefined>(undefined)
   const settingsRef = useRef<Settings | null>(null)
   settingsRef.current = settings
@@ -65,6 +102,7 @@ export function App(): React.JSX.Element {
         await Promise.all([refreshModels(), refreshHistory()])
         setStatus(await window.stt.call('get_status'))
         setVersion((await window.stt.info()).version)
+        setAppUpdate(await window.stt.updateState())
       } catch (err) {
         notify(errorText(err))
       }
@@ -80,6 +118,7 @@ export function App(): React.JSX.Element {
       window.stt.on('history-changed', () => void refreshHistory()),
       window.stt.on('hotkey-error', notify),
       window.stt.on('engine', setEngine),
+      window.stt.on('update', setAppUpdate),
       window.stt.on('core-exit', (message) => {
         notify(message)
         // The core restarts by itself; reload state once it is back.
@@ -135,6 +174,7 @@ export function App(): React.JSX.Element {
     progress,
     engine,
     update,
+    appUpdate,
     refreshModels,
     notify,
     go: setPage
@@ -167,6 +207,7 @@ export function App(): React.JSX.Element {
             </li>
           ))}
         </ul>
+        <UpdateNotice update={appUpdate} />
         <p className="nav-foot">
           Audio never leaves this computer.
           {version && <span>Version {version}</span>}

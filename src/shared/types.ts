@@ -62,7 +62,19 @@ export interface DownloadProgress {
   error: string | null
 }
 
+export interface UpdateState {
+  /**
+   * `none`: up to date (or not checked). `available`: a newer version exists but must be
+   * downloaded by hand. `downloading`: fetching it. `ready`: downloaded, restart to install.
+   * `error`: the check or download failed.
+   */
+  state: 'none' | 'available' | 'downloading' | 'ready' | 'error'
+  version?: string
+  message?: string
+}
+
 export interface CoreEvents {
+  update: UpdateState
   status: Status
   level: number
   'download-progress': DownloadProgress
@@ -101,5 +113,10 @@ export interface SttApi {
   ): Promise<CoreMethods[M]['result']>
   on<E extends keyof CoreEvents>(event: E, listener: (payload: CoreEvents[E]) => void): () => void
   info(): Promise<AppInfo>
+  /** The last known update state, without contacting the server. */
+  updateState(): Promise<UpdateState>
+  checkForUpdates(): Promise<UpdateState>
+  /** Quits, installs the downloaded update, and reopens the app. */
+  installUpdate(): void
   openExternal(url: string): void
 }

@@ -5,6 +5,17 @@ follow [Semantic Versioning](https://semver.org).
 
 ## Unreleased
 
+### Added
+
+- Update notice in the sidebar: "Restart to update" once a new version has downloaded (Windows, Linux AppImage),
+  or a download link where the app cannot update itself (macOS, Linux .deb)
+- "Check for updates" in Settings
+- The app checks for updates every six hours while it runs
+
+### Changed
+
+- Development runs use their own data folder, so `npm run dev` works while the installed app is open
+
 ## 0.1.1
 
 ### Fixed

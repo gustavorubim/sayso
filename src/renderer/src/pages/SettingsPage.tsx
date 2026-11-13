@@ -7,6 +7,20 @@ const isLinux = navigator.platform.toLowerCase().includes('linux')
 
 export function SettingsPage(s: AppState): React.JSX.Element {
   const [devices, setDevices] = useState<string[]>([])
+  const [checking, setChecking] = useState(false)
+  const [checkResult, setCheckResult] = useState<string | null>(null)
+
+  const check = async (): Promise<void> => {
+    setChecking(true)
+    setCheckResult(null)
+    const result = await window.stt.checkForUpdates()
+    setChecking(false)
+    if (result.message) setCheckResult(result.message)
+    else if (result.state === 'none') setCheckResult('You have the latest version.')
+    else if (result.state === 'ready') setCheckResult(`Version ${result.version} is ready. Restart to install it.`)
+    else if (result.state === 'downloading') setCheckResult(`Downloading version ${result.version}…`)
+    else if (result.state === 'available') setCheckResult(`Version ${result.version} is available.`)
+  }
 
   useEffect(() => {
     window.stt
@@ -131,6 +145,11 @@ export function SettingsPage(s: AppState): React.JSX.Element {
               onChange={(v) => void update({ launch_at_login: v })}
             />
           )}
+          <Field label="Updates" hint={checkResult ?? 'New versions are checked for automatically.'}>
+            <button type="button" className="btn" disabled={checking} onClick={() => void check()}>
+              {checking ? 'Checking…' : 'Check for updates'}
+            </button>
+          </Field>
         </div>
       </section>
     </div>

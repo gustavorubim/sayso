@@ -180,6 +180,25 @@ textarea {
   font-weight: 600;
 }
 
+.update {
+  margin: auto 0 14px;
+  padding: 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 13.5px;
+}
+
+.update .btn {
+  width: 100%;
+  margin-top: 8px;
+}
+
+/* With an update notice above it, the footer no longer needs to push itself down. */
+.update + .nav-foot {
+  margin-top: 0;
+}
+
 .nav-foot {
   margin-top: auto;
   padding: 0 10px;

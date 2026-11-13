@@ -1,10 +1,10 @@
 import { join } from 'node:path'
 import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, shell } from 'electron'
-import { autoUpdater } from 'electron-updater'
 import trayIconPath from '../../resources/tray.png?asset'
 import appIconPath from '../../resources/icon.png?asset'
 import type { AppInfo, Settings, Status } from '../shared/types'
 import { Core } from './core'
+import { checkForUpdates, getUpdateState, installUpdate, startUpdates } from './updates'
 
 const OVERLAY_WIDTH = 380
 const OVERLAY_HEIGHT = 72
@@ -187,6 +187,13 @@ function createTray(): Tray {
   return t
 }
 
+// Development runs get their own data folder, and with it their own single-instance lock,
+// so `npm run dev` works while the installed app is running. (Both want the same global
+// shortcut; whichever started second reports that it is taken.)
+if (!app.isPackaged) {
+  app.setPath('userData', `${app.getPath('userData')}-dev`)
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
@@ -209,6 +216,12 @@ if (!app.requestSingleInstanceLock()) {
     })
     ipcMain.handle('app:info', (): AppInfo => ({ version: app.getVersion(), platform: process.platform }))
     ipcMain.on('app:open-external', (_e, url: string) => openExternal(url))
+    ipcMain.handle('app:update-state', () => getUpdateState())
+    ipcMain.handle('app:check-updates', () => checkForUpdates())
+    ipcMain.on('app:install-update', () => {
+      quitting = true
+      installUpdate()
+    })
 
     mainWindow = createMainWindow()
     overlay = createOverlay()
@@ -220,10 +233,7 @@ if (!app.requestSingleInstanceLock()) {
       console.error('could not read settings:', err)
     }
 
-    // macOS can only self-update signed builds; see README.
-    if (app.isPackaged && process.platform !== 'darwin') {
-      autoUpdater.checkForUpdatesAndNotify().catch((err) => console.error('update check failed:', err))
-    }
+    startUpdates((state) => broadcast('update', state))
   })
 
   app.on('activate', showMainWindow)
