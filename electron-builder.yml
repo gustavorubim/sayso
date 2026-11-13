@@ -8,6 +8,8 @@ directories:
 
 files:
   - out/**
+  # Tray and window icons, loaded at runtime by the main process.
+  - resources/**
   - package.json
 
 # The Rust core is shipped next to the app, outside the asar archive.

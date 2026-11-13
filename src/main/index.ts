@@ -166,6 +166,7 @@ function openExternal(url: string): void {
 
 function createTray(): Tray {
   let image = nativeImage.createFromPath(trayIconPath)
+  if (image.isEmpty()) console.error(`tray icon could not be loaded from ${trayIconPath}`)
   if (process.platform === 'darwin') image = image.resize({ width: 18, height: 18 })
   const t = new Tray(image)
   t.setToolTip('Shortcut to Text')
