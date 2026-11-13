@@ -1,0 +1,70 @@
+name: Dependency audit
+
+# Checks the dependencies against known vulnerabilities every week, and on demand. A new
+# advisory can appear without any change to this repository, so this cannot be left to CI.
+# When something is found, it opens an issue (or leaves the existing one open).
+
+on:
+  schedule:
+    - cron: '0 7 * * 1' # Mondays, 07:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    name: Audit npm and Rust dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+
+      # Only what ships inside the app. Build tooling is reported below without failing.
+      - name: npm, packages that ship in the app
+        id: npm
+        continue-on-error: true
+        run: npm audit --omit=dev
+
+      - name: npm, build tooling (for information)
+        if: always()
+        continue-on-error: true
+        run: npm audit
+
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2
+        with:
+          tool: cargo-audit
+
+      - name: Rust crates
+        id: cargo
+        continue-on-error: true
+        run: cargo audit --file core/Cargo.lock
+
+      - name: Open an issue if anything was found
+        if: steps.npm.outcome == 'failure' || steps.cargo.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NPM: ${{ steps.npm.outcome }}
+          CARGO: ${{ steps.cargo.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create security-audit --color B60205 --description "Found by the weekly dependency audit" 2>/dev/null || true
+          existing=$(gh issue list --label security-audit --state open --json number --jq '.[0].number')
+          body="The dependency audit found known vulnerabilities.
+
+          - npm packages that ship in the app: $NPM
+          - Rust crates: $CARGO
+
+          Details are in the run log: $RUN_URL
+
+          Update the affected dependency, or note here why the advisory does not apply."
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "Still failing. $RUN_URL"
+          else
+            gh issue create --title "Dependency audit found vulnerabilities" --label security-audit --body "$body"
+          fi
+          exit 1

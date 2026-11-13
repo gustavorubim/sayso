@@ -11,7 +11,9 @@ export function RewritePage(s: AppState): React.JSX.Element {
   const [models, setModels] = useState<string[]>([])
   const [model, setModel] = useState(settings.rewrite_model)
   const [prompt, setPrompt] = useState(settings.rewrite_prompt)
-  const [sample, setSample] = useState('so um i was thinking we could maybe meet on on thursday instead if thats ok with every one')
+  const [sample, setSample] = useState(
+    'so um i was thinking we could maybe meet on on thursday instead if thats ok with every one'
+  )
   const [result, setResult] = useState<string | null>(null)
   const [trying, setTrying] = useState(false)
 
@@ -146,7 +148,10 @@ export function RewritePage(s: AppState): React.JSX.Element {
                 : 'Press it, speak, and press again. The cleaned-up text is written a moment later.'
             }
           >
-            <ShortcutInput value={settings.rewrite_shortcut} onChange={(shortcut) => update({ rewrite_shortcut: shortcut })} />
+            <ShortcutInput
+              value={settings.rewrite_shortcut}
+              onChange={(shortcut) => update({ rewrite_shortcut: shortcut })}
+            />
           </Field>
         </div>
       </section>

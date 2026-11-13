@@ -64,8 +64,8 @@ export function ModelsPage(s: AppState): React.JSX.Element {
       <header className="page-head">
         <h1>Speech models</h1>
         <p>
-          Models are downloaded from Hugging Face once, then run on this computer. Pick one below; you can switch at
-          any time.
+          Models are downloaded from Hugging Face once, then run on this computer. Pick one below; you can switch at any
+          time.
         </p>
       </header>
 
@@ -82,7 +82,10 @@ export function ModelsPage(s: AppState): React.JSX.Element {
           </select>
         </Field>
         {active && languages.length > 1 && (
-          <Field label="Spoken language" hint="Picking your language is a little faster and more accurate than detecting it.">
+          <Field
+            label="Spoken language"
+            hint="Picking your language is a little faster and more accurate than detecting it."
+          >
             <select
               value={languages.includes(s.settings.language) ? s.settings.language : languages[0]}
               onChange={(e) => void update({ language: e.target.value })}

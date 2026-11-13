@@ -32,9 +32,7 @@ export function SettingsPage(s: AppState): React.JSX.Element {
   const { settings, update } = s
   // Keep a saved device selectable even while it is unplugged.
   const deviceOptions =
-    settings.input_device && !devices.includes(settings.input_device)
-      ? [settings.input_device, ...devices]
-      : devices
+    settings.input_device && !devices.includes(settings.input_device) ? [settings.input_device, ...devices] : devices
 
   return (
     <div className="page">
@@ -101,7 +99,10 @@ export function SettingsPage(s: AppState): React.JSX.Element {
             label="Computer audio shortcut"
             hint="Press to start, press again to stop. Text is written at the cursor each time the speaker pauses."
           >
-            <ShortcutInput value={settings.capture_shortcut} onChange={(shortcut) => update({ capture_shortcut: shortcut })} />
+            <ShortcutInput
+              value={settings.capture_shortcut}
+              onChange={(shortcut) => update({ capture_shortcut: shortcut })}
+            />
           </Field>
         </div>
         <p className="quiet fine-print">

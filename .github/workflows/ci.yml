@@ -1,28 +1,68 @@
 name: CI
 
+# Runs on every pull request and every push to main. The release workflow also calls it, so
+# nothing is released that has not passed these checks.
+#
+# Pull requests skip macOS to save runner minutes (macOS costs ten times as much on a
+# private repository). Pushes to main, releases, and manual runs cover all three systems.
+
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_call:
+  workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 env:
   CARGO_TERM_COLOR: always
+  SYSTEMS: ${{ github.event_name == 'pull_request' && '["ubuntu-22.04","windows-latest"]' || '["ubuntu-22.04","windows-latest","macos-latest"]' }}
 
 jobs:
+  systems:
+    name: Choose systems
+    runs-on: ubuntu-latest
+    outputs:
+      os: ${{ steps.pick.outputs.os }}
+    steps:
+      - id: pick
+        run: echo "os=$SYSTEMS" >> "$GITHUB_OUTPUT"
+
+  interface:
+    name: Interface (format, lint, types, tests, build)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Format
+        run: npm run format:check
+      - name: Lint
+        run: npm run lint
+      - name: Type-check
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm run test
+      - name: Build
+        run: npm run build
+
   core:
     name: Core (${{ matrix.os }})
+    needs: systems
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-latest, macos-latest]
+        os: ${{ fromJSON(needs.systems.outputs.os) }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
@@ -50,29 +90,66 @@ jobs:
       - name: Test
         run: cargo test --manifest-path core/Cargo.toml
 
-  app:
-    name: App (typecheck and build)
-    runs-on: ubuntu-22.04
+  # Builds the app the way a release does, starts it, and has it check itself: the engine
+  # runs, the windows load, the icons are there. This catches packaging mistakes that no
+  # unit test can see. The checks are in src/main/smoke.ts.
+  smoke:
+    name: Packaged app starts (${{ matrix.os }})
+    needs: systems
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(needs.systems.outputs.os) }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Install Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libx11-dev libxi-dev libxtst-dev libxdo-dev xvfb
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: core
+          key: release
+
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: npm
+
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm run build
+
+      - name: Build the unpacked app
+        run: npm run pack:dir
+
+      - name: Start it and run its self-check
+        if: runner.os != 'Linux'
+        run: npm run smoke
+
+      - name: Start it and run its self-check (virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum npm run smoke
 
   # One required status check for branch protection, whatever the matrix looks like.
   ci-ok:
     name: CI passed
     if: always()
-    needs: [core, app]
+    needs: [interface, core, smoke]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
-          if [ "${{ needs.core.result }}" != "success" ] || [ "${{ needs.app.result }}" != "success" ]; then
-            echo "A required job failed."
-            exit 1
-          fi
+          echo "Job results: $RESULTS"
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "A required job did not succeed."
+              exit 1
+            fi
+          done

@@ -5,6 +5,14 @@ follow [Semantic Versioning](https://semver.org).
 
 ## Unreleased
 
+### Changed
+
+- Releases are built only after the full check suite passes on the tagged commit
+- CI now builds the real app on each system, starts it, and has it check itself
+- Tags with a suffix (`v0.5.0-beta.1`) publish as pre-releases that are not offered to stable users
+- The interface is linted with ESLint, formatted with Prettier, and has unit tests
+- A weekly dependency audit opens an issue when a shipped dependency has a known vulnerability
+
 ## 0.4.0
 
 ### Changed

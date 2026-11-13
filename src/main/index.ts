@@ -19,6 +19,7 @@ import appIconPath from '../../resources/icon.png?asset'
 import type { AppInfo, Settings, Status } from '../shared/types'
 import { Core } from './core'
 import { loadKey, saveKey } from './secrets'
+import { SMOKE_TEST, runSmokeTest } from './smoke'
 import { checkForUpdates, getUpdateState, installUpdate, startUpdates } from './updates'
 
 const OVERLAY_WIDTH = 380
@@ -96,7 +97,7 @@ function createMainWindow(): BrowserWindow {
     webPreferences
   })
   win.once('ready-to-show', () => {
-    if (!startHidden) win.show()
+    if (!startHidden && !SMOKE_TEST) win.show()
   })
   // Closing the window keeps the app listening in the tray.
   win.on('close', (event) => {
@@ -242,7 +243,10 @@ function createTray(): Tray {
 // Development runs get their own data folder, and with it their own single-instance lock,
 // so `npm run dev` works while the installed app is running. (Both want the same global
 // shortcut; whichever started second reports that it is taken.)
-if (!app.isPackaged) {
+if (SMOKE_TEST && process.env['SAYSO_USER_DATA']) {
+  // CI's self-check runs against a throwaway folder, never a real user's data.
+  app.setPath('userData', process.env['SAYSO_USER_DATA'])
+} else if (!app.isPackaged) {
   app.setPath('userData', `${app.getPath('userData')}-dev`)
 }
 
@@ -263,7 +267,7 @@ function migrateOldData(): void {
     }
   }
 }
-if (app.isPackaged) migrateOldData()
+if (app.isPackaged && !SMOKE_TEST) migrateOldData()
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -336,6 +340,16 @@ if (!app.requestSingleInstanceLock()) {
       applySettings(await core.call<Settings>('get_settings'))
     } catch (err) {
       console.error('could not read settings:', err)
+    }
+
+    if (SMOKE_TEST) {
+      void runSmokeTest({
+        core,
+        mainWindow,
+        overlay,
+        iconPaths: { tray: trayIconPath, window: appIconPath }
+      })
+      return
     }
 
     startUpdates((state) => broadcast('update', state))
