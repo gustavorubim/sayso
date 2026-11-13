@@ -5,6 +5,12 @@ follow [Semantic Versioning](https://semver.org).
 
 ## Unreleased
 
+## 0.2.1
+
+### Fixed
+
+- The tray icon and window icon were missing in the installed app
+
 ## 0.2.0
 
 ### Added
