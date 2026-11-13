@@ -125,7 +125,7 @@ fn fetch(url: &str, dest: &Path, cancel: &AtomicBool, on_bytes: &mut dyn FnMut(u
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(20))
         .timeout_read(Duration::from_secs(60))
-        .user_agent(concat!("shortcut-to-text/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("sayso/", env!("CARGO_PKG_VERSION")))
         .build();
     let mut request = agent.get(url);
     if existing > 0 {

@@ -32,6 +32,13 @@ event loop, and a crash in native code cannot take the interface down with it. E
 4. `engine.rs` runs the model. Audio longer than 25 s is first split at pauses with Silero VAD.
 5. `textproc.rs` applies filler removal, spoken line breaks, and dictionary replacements.
 6. `paste.rs` puts the text on the clipboard, sends the paste keystroke, and restores the clipboard.
+Two variations on this path:
+
+- **Writing as you speak.** The recorder also streams 16 kHz audio to a worker (`App::live_worker`) that runs the
+  voice-activity model on it and performs steps 4–6 for each utterance as soon as the speaker pauses.
+- **Rewrite shortcut.** Between steps 5 and 6, `rewrite.rs` sends the text to OpenRouter and the reply is delivered
+  instead. If the request fails, the plain transcript is delivered and the error is shown.
+
 7. `status` events drive the indicator window, which Electron shows without activating so focus never moves.
 
 ## Protocol
@@ -48,15 +55,16 @@ One JSON object per line. The full list of methods and events, with types, is in
 You can drive the core by hand, which is useful when debugging:
 
 ```bash
-echo '{"id":1,"method":"list_models"}' | core/target/debug/shortcut-to-text-core --data-dir /tmp/stt
+echo '{"id":1,"method":"list_models"}' | core/target/debug/sayso-core --data-dir /tmp/stt
 ```
 
 `transcribe_file` (params: `{"path": "speech.wav"}`) runs the selected model on a WAV file without a microphone.
+Add `"live": true` to push the file through the write-as-you-speak path and get the pieces back in order.
 
 ## Data on disk
 
-Everything lives in Electron's per-user data folder (`%APPDATA%/shortcut-to-text`,
-`~/Library/Application Support/shortcut-to-text`, `~/.config/shortcut-to-text`):
+Everything lives in Electron's per-user data folder (`%APPDATA%/sayso`,
+`~/Library/Application Support/sayso`, `~/.config/sayso`):
 
 | File | Contents |
 | --- | --- |
@@ -64,10 +72,14 @@ Everything lives in Electron's per-user data folder (`%APPDATA%/shortcut-to-text
 | `history.json` | The last 300 dictations |
 | `models/<id>/` | Downloaded model files |
 | `models/_vad/` | The shared voice-activity model |
+| `openrouter.key` | The OpenRouter API key, encrypted by the operating system's credential store |
 
 ## Security model
 
 - The renderer is sandboxed with context isolation; it can only call the methods exposed in `src/preload`.
 - External links open in the system browser and only for `huggingface.co` and `github.com`.
-- Network access is limited to model downloads from Hugging Face and update checks against GitHub Releases.
+- Network access is limited to model downloads from Hugging Face, update checks against GitHub Releases, and —
+  only when the rewrite shortcut is used — a request to OpenRouter carrying the transcribed text.
+- The OpenRouter key is encrypted with Electron's `safeStorage`. The interface can set or remove it but cannot
+  read it back; the core receives it at start-up and keeps it in memory only.
 - Audio is held in memory only for the length of a dictation and is never written to disk.

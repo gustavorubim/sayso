@@ -45,19 +45,39 @@ export function SettingsPage(s: AppState): React.JSX.Element {
       <section className="block">
         <h2>Shortcut</h2>
         <div className="panel">
-          <Field label="Dictation shortcut" hint="Works in every app while Shortcut to Text is running.">
+          <Field label="Dictation shortcut" hint="Works in every app while Sayso is running.">
             <ShortcutInput value={settings.shortcut} onChange={(shortcut) => update({ shortcut })} />
+          </Field>
+          <Field
+            label="When text is written"
+            hint={
+              settings.timing === 'live'
+                ? 'Each sentence appears as soon as you pause, while you keep talking.'
+                : 'Everything you said appears at once when you finish.'
+            }
+          >
+            <select
+              value={settings.timing}
+              onChange={(e) => void update({ timing: e.target.value as Settings['timing'] })}
+              aria-label="When text is written"
+            >
+              <option value="after">After I finish speaking</option>
+              <option value="live">As I speak, at each pause</option>
+            </select>
           </Field>
           <Field
             label="How it works"
             hint={
-              settings.mode === 'hold'
-                ? 'Records while the shortcut is held down.'
-                : 'Press once to start, again to stop. Better for long dictation.'
+              settings.timing === 'live'
+                ? 'Writing as you speak always uses press to start and stop: held keys would get in the way of the text being typed.'
+                : settings.mode === 'hold'
+                  ? 'Records while the shortcut is held down.'
+                  : 'Press once to start, again to stop. Better for long dictation.'
             }
           >
             <select
-              value={settings.mode}
+              value={settings.timing === 'live' ? 'toggle' : settings.mode}
+              disabled={settings.timing === 'live'}
               onChange={(e) => void update({ mode: e.target.value as Settings['mode'] })}
               aria-label="How the shortcut works"
             >

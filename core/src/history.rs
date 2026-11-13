@@ -12,6 +12,9 @@ pub struct HistoryItem {
     pub model: String,
     pub duration_ms: u64,
     pub words: usize,
+    /// Whether the text was rewritten by a language model after transcription.
+    #[serde(default)]
+    pub rewritten: bool,
 }
 
 pub fn load(path: &Path) -> Vec<HistoryItem> {

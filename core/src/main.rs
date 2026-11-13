@@ -1,4 +1,4 @@
-//! Shortcut to Text — native core.
+//! Sayso — native core.
 //!
 //! Runs as a child process of the desktop shell and talks JSON lines over
 //! stdin/stdout (see `rpc.rs`). The main thread owns the global hotkey and the
@@ -12,6 +12,7 @@ mod history;
 mod hotkey;
 mod models;
 mod paste;
+mod rewrite;
 mod rpc;
 mod settings;
 mod textproc;
@@ -51,5 +52,5 @@ fn data_dir_from_args() -> PathBuf {
             }
         }
     }
-    std::env::temp_dir().join("shortcut-to-text")
+    std::env::temp_dir().join("sayso")
 }

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { app } from 'electron'
 
-const BINARY = process.platform === 'win32' ? 'shortcut-to-text-core.exe' : 'shortcut-to-text-core'
+const BINARY = process.platform === 'win32' ? 'sayso-core.exe' : 'sayso-core'
 
 function corePath(): string {
   if (app.isPackaged) return join(process.resourcesPath, 'bin', BINARY)
@@ -24,7 +24,7 @@ interface Pending {
  * The Rust core, running as a child process. Requests and events are JSON
  * lines over stdio (see core/src/rpc.rs).
  *
- * Emits `event` (name, payload) for every core event.
+ * Emits `event` (name, payload) for every core event, and `started` each time the process starts.
  */
 export class Core extends EventEmitter {
   private child: ChildProcessWithoutNullStreams | null = null
@@ -44,6 +44,8 @@ export class Core extends EventEmitter {
       stdio: ['pipe', 'pipe', 'pipe']
     })
     this.child = child
+    // Lets the shell hand over state the core keeps only in memory.
+    setImmediate(() => this.emit('started'))
 
     createInterface({ input: child.stdout }).on('line', (line) => this.onLine(line))
     createInterface({ input: child.stderr }).on('line', (line) => console.error(`[core] ${line}`))

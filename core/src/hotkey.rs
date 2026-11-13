@@ -1,7 +1,9 @@
-//! Global hotkey with press *and* release events (needed for hold-to-talk).
+//! Global hotkeys with press *and* release events (needed for hold-to-talk).
 //!
 //! Hotkeys must be registered and pumped on one thread — the main thread on
 //! macOS — so this module owns the main thread for the life of the process.
+//!
+//! There are two slots: 0 is plain dictation, 1 is dictate-and-rewrite.
 
 use std::str::FromStr;
 use std::sync::mpsc::{Receiver, Sender};
@@ -13,9 +15,11 @@ use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 use crate::app::App;
 use crate::rpc;
 
+pub const SLOTS: usize = 2;
+
 pub enum HotkeyCmd {
-    /// Replace the registered shortcut; the result is sent back.
-    Set(String, Sender<Result<(), String>>),
+    /// Register `shortcut` in a slot, or clear the slot with `None`. The result is sent back.
+    Set(usize, Option<String>, Sender<Result<(), String>>),
 }
 
 pub fn parse(shortcut: &str) -> Result<HotKey, String> {
@@ -24,26 +28,35 @@ pub fn parse(shortcut: &str) -> Result<HotKey, String> {
 
 struct Registered {
     manager: Option<GlobalHotKeyManager>,
-    current: Option<HotKey>,
+    slots: [Option<HotKey>; SLOTS],
 }
 
 impl Registered {
-    fn set(&mut self, shortcut: &str) -> Result<(), String> {
+    fn set(&mut self, slot: usize, shortcut: Option<&str>) -> Result<(), String> {
         let manager = self
             .manager
             .as_ref()
             .ok_or("Global shortcuts are not available in this session (on Linux, Wayland is not supported yet).")?;
-        let hotkey = parse(shortcut)?;
-        if self.current.map(|h| h.id()) == Some(hotkey.id()) {
+        let wanted = shortcut.map(parse).transpose()?;
+        if self.slots[slot].map(|h| h.id()) == wanted.map(|h| h.id()) {
             return Ok(());
         }
-        manager
-            .register(hotkey)
-            .map_err(|e| format!("Could not register {shortcut}. Another app may be using it. ({e})"))?;
-        if let Some(old) = self.current.replace(hotkey) {
+        if let Some(hotkey) = wanted {
+            manager.register(hotkey).map_err(|e| {
+                format!(
+                    "Could not register {}. Another app may be using it. ({e})",
+                    shortcut.unwrap_or_default()
+                )
+            })?;
+        }
+        if let Some(old) = std::mem::replace(&mut self.slots[slot], wanted) {
             let _ = manager.unregister(old);
         }
         Ok(())
+    }
+
+    fn slot_of(&self, id: u32) -> Option<usize> {
+        self.slots.iter().position(|h| h.map(|h| h.id()) == Some(id))
     }
 }
 
@@ -55,11 +68,25 @@ pub fn run(app: Arc<App>, commands: Receiver<HotkeyCmd>) -> ! {
             None
         }
     };
-    let mut registered = Registered { manager, current: None };
+    let mut registered = Registered {
+        manager,
+        slots: [None; SLOTS],
+    };
 
-    let initial = app.settings.lock().unwrap().shortcut.clone();
-    if let Err(e) = registered.set(&initial) {
+    let (main, rewrite) = {
+        let s = app.settings.lock().unwrap();
+        (
+            s.shortcut.clone(),
+            s.rewrite_enabled.then(|| s.rewrite_shortcut.clone()),
+        )
+    };
+    if let Err(e) = registered.set(0, Some(&main)) {
         rpc::emit("hotkey-error", e);
+    }
+    if let Some(rewrite) = rewrite {
+        if let Err(e) = registered.set(1, Some(&rewrite)) {
+            rpc::emit("hotkey-error", e);
+        }
     }
 
     let events = GlobalHotKeyEvent::receiver();
@@ -67,15 +94,15 @@ pub fn run(app: Arc<App>, commands: Receiver<HotkeyCmd>) -> ! {
         pump();
 
         while let Ok(event) = events.try_recv() {
-            if registered.current.map(|h| h.id()) == Some(event.id) {
-                app.on_hotkey(event.state == HotKeyState::Pressed);
+            if let Some(slot) = registered.slot_of(event.id) {
+                app.on_hotkey(slot, event.state == HotKeyState::Pressed);
             }
         }
 
         while let Ok(cmd) = commands.try_recv() {
             match cmd {
-                HotkeyCmd::Set(shortcut, reply) => {
-                    let _ = reply.send(registered.set(&shortcut));
+                HotkeyCmd::Set(slot, shortcut, reply) => {
+                    let _ = reply.send(registered.set(slot, shortcut.as_deref()));
                 }
             }
         }
@@ -123,6 +150,7 @@ mod tests {
         for s in [
             "Ctrl+Shift+Space",
             "Alt+Space",
+            "Ctrl+Alt+Space",
             "Ctrl+Alt+KeyD",
             "Super+Shift+F9",
             "Ctrl+Digit1",
@@ -132,5 +160,17 @@ mod tests {
         }
         assert!(parse("Ctrl+Shift").is_err());
         assert!(parse("").is_err());
+    }
+
+    #[test]
+    fn different_shortcuts_have_different_ids() {
+        assert_ne!(
+            parse("Ctrl+Shift+Space").unwrap().id(),
+            parse("Ctrl+Alt+Space").unwrap().id()
+        );
+        assert_eq!(
+            parse("Ctrl+Shift+Space").unwrap().id(),
+            parse("Shift+Ctrl+Space").unwrap().id()
+        );
     }
 }

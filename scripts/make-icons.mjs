@@ -1,56 +1,127 @@
-// Draws the app icon procedurally and writes PNGs — no image tooling needed.
+// Draws the Sayso icon procedurally and writes PNGs — no image tooling needed.
 //   build/icon.png      1024px, used by electron-builder for installers
-//   resources/icon.png   256px, window icon
+//   resources/icon.png   256px, window icon and in-app mark
 //   resources/tray.png    32px, tray icon
+//
+// The mark is a heavy rounded "S" that doubles as a speech bubble: a tail hangs from its
+// lower-left corner and a small notch is cut into its upper-right end.
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
 
-const BG = [31, 95, 74]
-const BAR = [238, 241, 236]
-const CURSOR = [255, 184, 77]
+const TILE = [233, 74, 53] // #E94A35
+const TILE_SHADE = [206, 58, 40]
+const GLYPH = [255, 237, 206] // #FFEDCE
 
-// Signed distance to a rounded rectangle centred at (cx, cy).
-function roundedRect(px, py, cx, cy, halfW, halfH, r) {
-  const qx = Math.abs(px - cx) - (halfW - r)
-  const qy = Math.abs(py - cy) - (halfH - r)
+// ---- geometry, in a 0..1 square with y pointing down ----
+
+const R = 0.118 // radius of the S's two bowls (centre line)
+const W = 0.094 // half the stroke width
+const CX = 0.5
+const TOP = 0.5 - 2 * R
+const BOTTOM = 0.5 + 2 * R
+const LEFT = CX - 0.085
+const RIGHT = CX + 0.085
+
+function arc(cx, cy, from, to, steps = 28) {
+  const pts = []
+  for (let i = 0; i <= steps; i++) {
+    const a = ((from + ((to - from) * i) / steps) * Math.PI) / 180
+    pts.push([cx + R * Math.cos(a), cy + R * Math.sin(a)])
+  }
+  return pts
+}
+
+// Centre line of the S, from its upper-right end to its lower-left end.
+const SPINE = [
+  [RIGHT + 0.07, TOP],
+  ...arc(LEFT, TOP + R, 270, 90), // upper bowl, bulging left
+  ...arc(RIGHT, BOTTOM - R, 270, 450), // lower bowl, bulging right
+  [LEFT - 0.07, BOTTOM]
+]
+
+// Speech-bubble tail under the lower-left end.
+const TAIL = [
+  [LEFT - 0.115, BOTTOM + 0.03],
+  [LEFT - 0.105, BOTTOM + W + 0.075],
+  [LEFT + 0.03, BOTTOM + W - 0.02]
+]
+
+// Notch at the upper-right end, a small bite out of the underside.
+const NOTCH = { x: RIGHT + 0.105, y: TOP + W + 0.012, rx: 0.018, ry: 0.034 }
+
+function distToSegment(px, py, [ax, ay], [bx, by]) {
+  const dx = bx - ax
+  const dy = by - ay
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1)))
+  return Math.hypot(px - (ax + dx * t), py - (ay + dy * t))
+}
+
+function distToSpine(px, py) {
+  let d = Infinity
+  for (let i = 0; i < SPINE.length - 1; i++) d = Math.min(d, distToSegment(px, py, SPINE[i], SPINE[i + 1]))
+  return d
+}
+
+// Signed distance to a triangle (negative inside).
+function triangle(px, py, [a, b, c]) {
+  const edges = [
+    [a, b],
+    [b, c],
+    [c, a]
+  ]
+  let d = Infinity
+  let inside = true
+  const sign = (c[0] - a[0]) * (b[1] - a[1]) - (c[1] - a[1]) * (b[0] - a[0]) > 0 ? 1 : -1
+  for (const [p, q] of edges) {
+    d = Math.min(d, distToSegment(px, py, p, q))
+    const cross = (px - p[0]) * (q[1] - p[1]) - (py - p[1]) * (q[0] - p[0])
+    if (cross * sign < 0) inside = false
+  }
+  return inside ? -d : d
+}
+
+function roundedSquare(px, py, half, r) {
+  const qx = Math.abs(px - 0.5) - (half - r)
+  const qy = Math.abs(py - 0.5) - (half - r)
   return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r
 }
 
-// Four sound bars, then a text cursor: speech turning into text.
-const BARS = [
-  { x: 0.25, h: 0.2 },
-  { x: 0.375, h: 0.42 },
-  { x: 0.5, h: 0.28 },
-  { x: 0.625, h: 0.5 }
-]
+function glyphDistance(px, py) {
+  // Union of the stroke and the tail, with a soft join; then subtract the notch.
+  const stroke = distToSpine(px, py) - W
+  const tail = triangle(px, py, TAIL) - 0.012
+  const body = Math.min(stroke, tail)
+  const nx = (px - NOTCH.x) / NOTCH.rx
+  const ny = (py - NOTCH.y) / NOTCH.ry
+  const notch = (Math.hypot(nx, ny) - 1) * Math.min(NOTCH.rx, NOTCH.ry)
+  return Math.max(body, -notch)
+}
+
+const mix = (a, b, t) => a.map((c, i) => c + (b[i] - c) * t)
 
 function render(size) {
   const px = new Uint8Array(size * size * 4)
-  const cover = (d) => Math.min(1, Math.max(0, 0.5 - d))
+  const cover = (d) => Math.min(1, Math.max(0, 0.5 - d * size))
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const u = x + 0.5
-      const v = y + 0.5
-      const bg = cover(roundedRect(u, v, size / 2, size / 2, size * 0.46, size * 0.46, size * 0.2))
-      let color = BG
-      let bar = 0
-      for (const b of BARS) {
-        const w = size * 0.036
-        bar = Math.max(bar, cover(roundedRect(u, v, size * b.x, size / 2, w, (size * b.h) / 2, w)))
-      }
-      const cw = size * 0.022
-      const cursor = cover(roundedRect(u, v, size * 0.76, size / 2, cw, size * 0.27, cw))
-      const mix = (a, b, t) => a.map((c, i) => c + (b[i] - c) * t)
-      color = mix(mix(color, BAR, bar), CURSOR, cursor)
+      const u = (x + 0.5) / size
+      const v = (y + 0.5) / size
+      const tile = cover(roundedSquare(u, v, 0.46, 0.21))
+      // A faint darker pool under the glyph gives the flat shapes a little depth.
+      const shadow = Math.max(0, 1 - Math.max(0, glyphDistance(u - 0.006, v - 0.014)) / 0.035) * 0.55
+      let color = mix(TILE, TILE_SHADE, shadow)
+      color = mix(color, GLYPH, cover(glyphDistance(u, v)))
       const i = (y * size + x) * 4
       px[i] = Math.round(color[0])
       px[i + 1] = Math.round(color[1])
       px[i + 2] = Math.round(color[2])
-      px[i + 3] = Math.round(bg * 255)
+      px[i + 3] = Math.round(tile * 255)
     }
   }
   return px
 }
+
+// ---- minimal PNG encoder ----
 
 const crcTable = Array.from({ length: 256 }, (_, n) => {
   let c = n

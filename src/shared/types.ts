@@ -21,6 +21,12 @@ export interface Settings {
   trailing_space: boolean
   save_history: boolean
   replacements: Replacement[]
+  /** `after`: write when the recording stops. `live`: write at each pause while speaking. */
+  timing: 'after' | 'live'
+  rewrite_enabled: boolean
+  rewrite_shortcut: string
+  rewrite_model: string
+  rewrite_prompt: string
 }
 
 export interface ModelInfo {
@@ -45,9 +51,10 @@ export interface HistoryItem {
   model: string
   duration_ms: number
   words: number
+  rewritten: boolean
 }
 
-export type Phase = 'idle' | 'recording' | 'transcribing' | 'done' | 'error'
+export type Phase = 'idle' | 'recording' | 'transcribing' | 'rewriting' | 'done' | 'error'
 
 export interface Status {
   phase: Phase
@@ -97,6 +104,9 @@ export interface CoreMethods {
   get_history: { params: void; result: HistoryItem[] }
   delete_history_item: { params: { id: number }; result: null }
   clear_history: { params: void; result: null }
+  get_default_settings: { params: void; result: Settings }
+  list_rewrite_models: { params: void; result: string[] }
+  rewrite_text: { params: { text: string }; result: string }
   toggle_recording: { params: void; result: null }
   copy_text: { params: { text: string }; result: null }
 }
@@ -118,5 +128,9 @@ export interface SttApi {
   checkForUpdates(): Promise<UpdateState>
   /** Quits, installs the downloaded update, and reopens the app. */
   installUpdate(): void
+  /** Whether an OpenRouter API key is stored. The key itself is never exposed to the interface. */
+  hasRewriteKey(): Promise<boolean>
+  /** Stores the OpenRouter API key, or removes it when empty. */
+  setRewriteKey(key: string): Promise<{ persisted: boolean }>
   openExternal(url: string): void
 }

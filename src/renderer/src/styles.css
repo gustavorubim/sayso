@@ -1,37 +1,39 @@
 :root {
-  --bg: #eef1ec;
-  --surface: #fafbf9;
-  --ink: #17231d;
-  --muted: #56655b;
-  --line: #d2d9d1;
-  --accent: #1f5f4a;
-  --accent-ink: #f6faf7;
-  --accent-soft: #dbe8e1;
-  --amber: #ffb84d;
+  /* Sayso palette: tomato, cream, plum, peach, periwinkle. */
+  --bg: #fff6ea;
+  --surface: #fffdf9;
+  --ink: #3d1c2b;
+  --muted: #876172;
+  --line: #f1dcc6;
+  --accent: #e94a35;
+  --accent-ink: #fff6ea;
+  --accent-soft: #ffe3d3;
+  --spark: #a9b7f2;
   --danger: #b3283f;
-  --key-face: #fdfefc;
-  --key-edge: #b9c3ba;
+  --key-face: #fffdf9;
+  --key-edge: #e3c4a8;
+  --pill: #612f45;
 
-  --display: 'Bricolage Grotesque Variable', 'Segoe UI', system-ui, sans-serif;
+  --display: 'Fredoka Variable', 'Segoe UI', system-ui, sans-serif;
   --body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --radius: 10px;
+  --radius: 12px;
 
   color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #111815;
-    --surface: #19221e;
-    --ink: #e7ede8;
-    --muted: #9aa89f;
-    --line: #2c3832;
-    --accent: #63c2a2;
-    --accent-ink: #0c1512;
-    --accent-soft: #20332c;
-    --danger: #f0768a;
-    --key-face: #26322c;
-    --key-edge: #0a0f0d;
+    --bg: #25121c;
+    --surface: #321a27;
+    --ink: #ffedce;
+    --muted: #c9a3b1;
+    --line: #4a2a3a;
+    --accent: #f0604b;
+    --accent-ink: #fff6ea;
+    --accent-soft: #4a2331;
+    --danger: #ff8d9c;
+    --key-face: #40222f;
+    --key-edge: #170a11;
   }
 }
 
@@ -118,45 +120,15 @@ textarea {
   align-items: center;
   gap: 10px;
   padding: 0 10px 22px;
-  font: 650 16px/1 var(--display);
-  letter-spacing: -0.01em;
+  font: 600 21px/1 var(--display);
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--pill);
 }
 
 .brand-mark {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 22px;
-  padding: 0 5px;
-  border-radius: 6px;
-  background: var(--accent);
-}
-
-.brand-mark i {
-  width: 2px;
-  border-radius: 1px;
-  background: var(--accent-ink);
-}
-
-.brand-mark i:nth-child(1) {
-  height: 5px;
-}
-.brand-mark i:nth-child(2) {
-  height: 10px;
-}
-.brand-mark i:nth-child(3) {
-  height: 7px;
-}
-.brand-mark i:nth-child(4) {
-  height: 12px;
-}
-
-.brand-mark b {
-  width: 2px;
-  height: 13px;
-  margin-left: 2px;
-  border-radius: 1px;
-  background: var(--amber);
+  width: 30px;
+  height: 30px;
 }
 
 .nav-item {
@@ -306,8 +278,9 @@ kbd {
 .hero.is-live .keys-xl kbd {
   transform: translateY(5px);
   border-bottom-width: 3px;
-  background: var(--amber);
-  color: #17231d;
+  border-color: #c53a27;
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 
 /* ---- controls ---- */
@@ -367,6 +340,7 @@ kbd {
 select,
 input[type='text'],
 input[type='search'],
+input[type='password'],
 input:not([type]),
 textarea {
   padding: 6px 10px;
@@ -457,6 +431,68 @@ select {
 .shortcut-wait {
   color: var(--accent);
   font-weight: 600;
+}
+
+.row-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.row-stacked textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.row-stacked .link {
+  align-self: flex-start;
+  font-size: 13.5px;
+}
+
+.key-entry {
+  display: flex;
+  gap: 8px;
+}
+
+.key-entry input {
+  width: 220px;
+}
+
+.model-input {
+  width: 300px;
+}
+
+.try-button {
+  margin-top: 10px;
+}
+
+.try-note {
+  margin-left: 12px;
+  font-size: 13.5px;
+}
+
+.try-result {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+  white-space: pre-line;
+}
+
+.fine-print {
+  max-width: 68ch;
+  margin-top: 10px;
+  font-size: 13.5px;
+}
+
+.hero-second {
+  margin-top: -6px;
+  color: var(--muted);
+}
+
+.hero-second .keys {
+  margin-right: 4px;
+  vertical-align: middle;
 }
 
 /* ---- home ---- */
@@ -708,8 +744,8 @@ select {
   padding: 0 18px;
   border: 1px solid rgb(255 255 255 / 14%);
   border-radius: 22px;
-  background: #101814;
-  color: #eef1ec;
+  background: var(--pill);
+  color: #ffedce;
   font: 600 14px/1.25 var(--display);
 }
 
@@ -721,7 +757,7 @@ select {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--amber);
+  background: #f0604b;
 }
 
 .pill-bars {
@@ -734,7 +770,7 @@ select {
 .pill-bars i {
   width: 3px;
   border-radius: 2px;
-  background: #eef1ec;
+  background: #f8a88c;
   transition: height 60ms linear;
 }
 
@@ -742,7 +778,7 @@ select {
   width: 14px;
   height: 14px;
   border: 2px solid rgb(255 255 255 / 25%);
-  border-top-color: var(--amber);
+  border-top-color: #f8a88c;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -751,7 +787,7 @@ select {
   height: auto;
   min-height: 44px;
   padding: 8px 18px;
-  border-color: #f0768a;
+  border-color: #f8a88c;
   font-weight: 500;
 }
 

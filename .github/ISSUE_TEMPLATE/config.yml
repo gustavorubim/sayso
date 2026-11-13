@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Question or idea to discuss
-    url: https://github.com/gustavorubim/shortcut-to-text/discussions
+    url: https://github.com/gustavorubim/sayso/discussions
     about: Ask how something works or float an idea before filing an issue.
   - name: Security problem
-    url: https://github.com/gustavorubim/shortcut-to-text/security/advisories/new
+    url: https://github.com/gustavorubim/sayso/security/advisories/new
     about: Report vulnerabilities privately, not in a public issue.

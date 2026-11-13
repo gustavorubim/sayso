@@ -9,6 +9,40 @@ use sherpa_onnx::{
 use crate::audio::SAMPLE_RATE;
 use crate::models::{Kind, ModelDef};
 
+/// Samples per voice-activity window (Silero expects 512 at 16 kHz).
+pub const VAD_WINDOW: usize = 512;
+
+/// Creates a voice-activity detector. A pause of `min_silence` seconds ends an utterance, and
+/// an utterance is cut once it reaches `max_speech` seconds. `None` if the model cannot load.
+pub fn create_vad(model: &Path, min_silence: f32, max_speech: f32) -> Option<VoiceActivityDetector> {
+    let config = VadModelConfig {
+        silero_vad: SileroVadModelConfig {
+            model: Some(model.to_string_lossy().into_owned()),
+            threshold: 0.5,
+            min_silence_duration: min_silence,
+            min_speech_duration: 0.25,
+            window_size: VAD_WINDOW as i32,
+            max_speech_duration: max_speech,
+        },
+        sample_rate: SAMPLE_RATE as i32,
+        num_threads: 1,
+        provider: Some("cpu".into()),
+        debug: false,
+        ..Default::default()
+    };
+    VoiceActivityDetector::create(&config, 60.0)
+}
+
+/// Hands every finished utterance to `f` and removes it from the detector.
+pub fn drain_vad(vad: &VoiceActivityDetector, f: &mut dyn FnMut(&[f32])) {
+    while !vad.is_empty() {
+        if let Some(segment) = vad.front() {
+            f(segment.samples());
+        }
+        vad.pop();
+    }
+}
+
 /// Whisper's window is 30 s; keep every chunk comfortably below it.
 const MAX_CHUNK_SECONDS: usize = 25;
 
@@ -152,39 +186,16 @@ impl Engine {
 
     /// Splits long audio into utterances with Silero VAD. `None` if VAD is unavailable.
     fn split_on_silence(&self, samples: &[f32]) -> Option<Vec<Vec<f32>>> {
-        let model = self.vad_model.as_ref()?;
-        let config = VadModelConfig {
-            silero_vad: SileroVadModelConfig {
-                model: Some(model.to_string_lossy().into_owned()),
-                threshold: 0.5,
-                min_silence_duration: 0.4,
-                min_speech_duration: 0.25,
-                window_size: 512,
-                max_speech_duration: MAX_CHUNK_SECONDS as f32,
-            },
-            sample_rate: SAMPLE_RATE as i32,
-            num_threads: 1,
-            provider: Some("cpu".into()),
-            debug: false,
-            ..Default::default()
-        };
-        let vad = VoiceActivityDetector::create(&config, 60.0)?;
+        let vad = create_vad(self.vad_model.as_ref()?, 0.4, MAX_CHUNK_SECONDS as f32)?;
 
         let mut segments = Vec::new();
-        let mut drain = |vad: &VoiceActivityDetector| {
-            while !vad.is_empty() {
-                if let Some(seg) = vad.front() {
-                    segments.push(seg.samples().to_vec());
-                }
-                vad.pop();
-            }
-        };
-        for window in samples.chunks(512) {
+        let mut keep = |segment: &[f32]| segments.push(segment.to_vec());
+        for window in samples.chunks(VAD_WINDOW) {
             vad.accept_waveform(window);
-            drain(&vad);
+            drain_vad(&vad, &mut keep);
         }
         vad.flush();
-        drain(&vad);
+        drain_vad(&vad, &mut keep);
 
         if segments.is_empty() {
             None

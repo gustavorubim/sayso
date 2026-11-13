@@ -30,7 +30,20 @@ pub struct Settings {
     pub trailing_space: bool,
     pub save_history: bool,
     pub replacements: Vec<Replacement>,
+    /// `after` (write once the recording stops) or `live` (write at each pause while speaking).
+    pub timing: String,
+    /// Whether the second shortcut, which rewrites the transcript through OpenRouter, is active.
+    pub rewrite_enabled: bool,
+    pub rewrite_shortcut: String,
+    /// OpenRouter model id, such as `anthropic/claude-haiku-5.5`.
+    pub rewrite_model: String,
+    /// How the model should rewrite the dictation.
+    pub rewrite_prompt: String,
 }
+
+pub const DEFAULT_REWRITE_PROMPT: &str = "Fix typos, grammar and punctuation. Rephrase where it makes the text \
+clearer and more natural to read, and remove false starts and repeated words. Keep the meaning, the language it was \
+spoken in, and the speaker's tone. Do not add information that was not said.";
 
 impl Default for Settings {
     fn default() -> Self {
@@ -53,6 +66,16 @@ impl Default for Settings {
             trailing_space: true,
             save_history: true,
             replacements: Vec::new(),
+            timing: "after".into(),
+            rewrite_enabled: false,
+            // The dictation shortcut plus one more modifier.
+            rewrite_shortcut: if cfg!(target_os = "macos") {
+                "Alt+Shift+Space".into()
+            } else {
+                "Ctrl+Shift+Alt+Space".into()
+            },
+            rewrite_model: "anthropic/claude-haiku-5.5".into(),
+            rewrite_prompt: DEFAULT_REWRITE_PROMPT.into(),
         }
     }
 }

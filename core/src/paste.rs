@@ -15,7 +15,7 @@ pub fn copy(text: &str) -> Result<(), String> {
 fn enigo() -> Result<Enigo, String> {
     Enigo::new(&EnigoSettings::default()).map_err(|e| {
         if cfg!(target_os = "macos") {
-            format!("Allow Shortcut to Text under System Settings > Privacy & Security > Accessibility. ({e})")
+            format!("Allow Sayso under System Settings > Privacy & Security > Accessibility. ({e})")
         } else {
             format!("Could not send keystrokes: {e}")
         }

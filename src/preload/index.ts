@@ -14,6 +14,8 @@ const api: SttApi = {
   updateState: () => ipcRenderer.invoke('app:update-state'),
   checkForUpdates: () => ipcRenderer.invoke('app:check-updates'),
   installUpdate: () => ipcRenderer.send('app:install-update'),
+  hasRewriteKey: () => ipcRenderer.invoke('rewrite:has-key'),
+  setRewriteKey: (key: string) => ipcRenderer.invoke('rewrite:set-key', key),
   openExternal: (url: string) => ipcRenderer.send('app:open-external', url)
 } as SttApi
 

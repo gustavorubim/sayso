@@ -1,14 +1,14 @@
 {
-  "name": "shortcut-to-text",
-  "version": "0.2.1",
+  "name": "sayso",
+  "version": "0.3.0",
   "description": "Hold a shortcut, speak, and the text lands where your cursor is. Local speech-to-text with models from Hugging Face.",
   "main": "./out/main/index.js",
   "author": "gustavorubim <gustavorubim@users.noreply.github.com>",
   "license": "MIT",
-  "homepage": "https://github.com/gustavorubim/shortcut-to-text",
+  "homepage": "https://github.com/gustavorubim/sayso",
   "repository": {
     "type": "git",
-    "url": "https://github.com/gustavorubim/shortcut-to-text.git"
+    "url": "https://github.com/gustavorubim/sayso.git"
   },
   "scripts": {
     "core:build": "cargo build --manifest-path core/Cargo.toml",
@@ -27,7 +27,7 @@
     "electron-updater": "^6.8.11"
   },
   "devDependencies": {
-    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@fontsource-variable/fredoka": "^5.3.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

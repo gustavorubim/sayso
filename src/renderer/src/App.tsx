@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DownloadProgress, HistoryItem, ModelInfo, Settings, Status, UpdateState } from '../../shared/types'
+import brandIcon from '../../../resources/icon.png'
 import { errorText } from './format'
 import { DictionaryPage } from './pages/Dictionary'
 import { HistoryPage } from './pages/History'
 import { HomePage } from './pages/Home'
 import { ModelsPage } from './pages/Models'
+import { RewritePage } from './pages/Rewrite'
 import { SettingsPage } from './pages/SettingsPage'
 
-type Page = 'home' | 'models' | 'dictionary' | 'history' | 'settings'
+type Page = 'home' | 'models' | 'rewrite' | 'dictionary' | 'history' | 'settings'
 
 const NAV: { id: Page; label: string }[] = [
   { id: 'home', label: 'Dictate' },
   { id: 'models', label: 'Speech models' },
+  { id: 'rewrite', label: 'Rewrite' },
   { id: 'dictionary', label: 'Dictionary' },
   { id: 'history', label: 'History' },
   { id: 'settings', label: 'Settings' }
@@ -32,7 +35,7 @@ export interface AppState {
   go: (page: Page) => void
 }
 
-const RELEASES_URL = 'https://github.com/gustavorubim/shortcut-to-text/releases/latest'
+const RELEASES_URL = 'https://github.com/gustavorubim/sayso/releases/latest'
 
 function UpdateNotice({ update }: { update: UpdateState }): React.JSX.Element | null {
   if (update.state === 'none' || !update.version) return null
@@ -184,14 +187,8 @@ export function App(): React.JSX.Element {
     <div className="shell">
       <nav className="nav" aria-label="Sections">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-            <i />
-            <b />
-          </span>
-          Shortcut to Text
+          <img className="brand-mark" src={brandIcon} alt="" />
+          Sayso
         </div>
         <ul>
           {NAV.map((item) => (
@@ -209,7 +206,7 @@ export function App(): React.JSX.Element {
         </ul>
         <UpdateNotice update={appUpdate} />
         <p className="nav-foot">
-          Audio never leaves this computer.
+          Your audio never leaves this computer.
           {version && <span>Version {version}</span>}
         </p>
       </nav>
@@ -217,6 +214,7 @@ export function App(): React.JSX.Element {
       <main className="main">
         {page === 'home' && <HomePage {...state} />}
         {page === 'models' && <ModelsPage {...state} />}
+        {page === 'rewrite' && <RewritePage {...state} />}
         {page === 'dictionary' && <DictionaryPage {...state} />}
         {page === 'history' && <HistoryPage {...state} />}
         {page === 'settings' && <SettingsPage {...state} />}

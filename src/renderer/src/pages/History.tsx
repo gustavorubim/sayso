@@ -82,6 +82,7 @@ export function HistoryPage(s: AppState): React.JSX.Element {
                 <time>{timeAgo(h.id)}</time>
                 <span>{(h.duration_ms / 1000).toFixed(1)} s</span>
                 <span>{h.model}</span>
+                {h.rewritten && <span className="tag">Rewritten</span>}
                 <span className="history-actions">
                   <button type="button" className="btn btn-quiet" onClick={() => void copy(h.id, h.text)}>
                     {copied === h.id ? 'Copied' : 'Copy'}

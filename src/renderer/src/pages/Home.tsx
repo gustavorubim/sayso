@@ -4,22 +4,28 @@ import { timeAgo } from '../format'
 
 export function HomePage(s: AppState): React.JSX.Element {
   const active = s.models.find((m) => m.id === s.settings.model_id && m.installed)
-  const hold = s.settings.mode === 'hold'
+  const liveWriting = s.settings.timing === 'live'
+  // Live writing is always press-to-toggle (see Settings).
+  const hold = s.settings.mode === 'hold' && !liveWriting
   const words = s.history.reduce((sum, h) => sum + h.words, 0)
-  const live = s.status.phase === 'recording' || s.status.phase === 'transcribing'
+  const live =
+    s.status.phase === 'recording' || s.status.phase === 'transcribing' || s.status.phase === 'rewriting'
 
   return (
     <div className="page">
       <section className={`hero ${live ? 'is-live' : ''}`}>
         <Keys shortcut={s.settings.shortcut} size="xl" />
         <h1>
-          {hold
-            ? 'Hold the shortcut and speak. Let go, and your words are typed where the cursor is.'
-            : 'Press the shortcut and speak. Press it again, and your words are typed where the cursor is.'}
+          {liveWriting
+            ? 'Press the shortcut and speak. Your words are typed at each pause. Press it again to stop.'
+            : hold
+              ? 'Hold the shortcut and speak. Let go, and your words are typed where the cursor is.'
+              : 'Press the shortcut and speak. Press it again, and your words are typed where the cursor is.'}
         </h1>
         <p className="hero-state" aria-live="polite">
           {s.status.phase === 'recording' && 'Listening…'}
           {s.status.phase === 'transcribing' && 'Writing…'}
+          {s.status.phase === 'rewriting' && 'Polishing the wording…'}
           {!live && active && s.engine === 'loading' && `Loading ${active.name}…`}
           {!live && active && s.engine !== 'loading' && `Ready with ${active.name}.`}
           {!live && !active && 'One step left: choose a speech model.'}
@@ -28,6 +34,11 @@ export function HomePage(s: AppState): React.JSX.Element {
           <button type="button" className="btn btn-primary" onClick={() => s.go('models')}>
             Choose a speech model
           </button>
+        )}
+        {active && s.settings.rewrite_enabled && (
+          <p className="hero-second">
+            <Keys shortcut={s.settings.rewrite_shortcut} /> does the same, then tidies the wording before writing it.
+          </p>
         )}
       </section>
 

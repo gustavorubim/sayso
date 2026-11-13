@@ -1,4 +1,4 @@
-import '@fontsource-variable/bricolage-grotesque'
+import '@fontsource-variable/fredoka'
 import './styles.css'
 import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -43,6 +43,12 @@ function Overlay(): React.JSX.Element {
         <>
           <span className="pill-spinner" aria-hidden="true" />
           <span className="pill-text">Writing</span>
+        </>
+      )}
+      {status.phase === 'rewriting' && (
+        <>
+          <span className="pill-spinner" aria-hidden="true" />
+          <span className="pill-text">Polishing</span>
         </>
       )}
       {status.phase === 'done' && <span className="pill-text">Done</span>}

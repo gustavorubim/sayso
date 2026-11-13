@@ -1,6 +1,6 @@
-appId: com.shortcuttotext.app
-productName: Shortcut to Text
-copyright: Copyright © Shortcut to Text contributors
+appId: com.sayso.app
+productName: Sayso
+copyright: Copyright © Sayso contributors
 
 directories:
   buildResources: build
@@ -17,12 +17,12 @@ extraResources:
   - from: core/target/release
     to: bin
     filter:
-      - shortcut-to-text-core
-      - shortcut-to-text-core.exe
+      - sayso-core
+      - sayso-core.exe
 
 win:
   target: nsis
-  artifactName: Shortcut-to-Text-${version}-windows-${arch}-setup.${ext}
+  artifactName: Sayso-${version}-windows-${arch}-setup.${ext}
 
 nsis:
   oneClick: false
@@ -34,19 +34,19 @@ mac:
   target:
     - dmg
     - zip
-  artifactName: Shortcut-to-Text-${version}-mac-${arch}.${ext}
+  artifactName: Sayso-${version}-mac-${arch}.${ext}
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
-    NSMicrophoneUsageDescription: Shortcut to Text records your voice while the dictation shortcut is active and turns it into text on this Mac.
+    NSMicrophoneUsageDescription: Sayso records your voice while the dictation shortcut is active and turns it into text on this Mac.
 
 linux:
   category: Utility
   target:
     - AppImage
     - deb
-  artifactName: Shortcut-to-Text-${version}-linux-${arch}.${ext}
+  artifactName: Sayso-${version}-linux-${arch}.${ext}
 
 publish:
   provider: github

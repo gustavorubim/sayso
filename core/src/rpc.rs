@@ -98,11 +98,30 @@ fn dispatch(app: &Arc<App>, method: &str, params: Value) -> Result<Value, String
             app.clear_history();
             Ok(Value::Null)
         }
-        "toggle_recording" => {
-            app.toggle();
+        "get_default_settings" => to_value(Settings::default()),
+        "set_api_key" => {
+            let key = params
+                .get("key")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|k| !k.is_empty());
+            app.set_api_key(key.map(str::to_string));
             Ok(Value::Null)
         }
-        "transcribe_file" => to_value(app.transcribe_file(&str_param(&params, "path")?)?),
+        "list_rewrite_models" => to_value(crate::rewrite::list_models()?),
+        "toggle_recording" => {
+            app.toggle(false);
+            Ok(Value::Null)
+        }
+        "transcribe_file" => {
+            let path = str_param(&params, "path")?;
+            if params.get("live").and_then(Value::as_bool).unwrap_or(false) {
+                to_value(app.transcribe_file_live(&path)?)
+            } else {
+                to_value(app.transcribe_file(&path)?)
+            }
+        }
+        "rewrite_text" => to_value(app.rewrite_text(&str_param(&params, "text")?)?),
         "copy_text" => {
             crate::paste::copy(&str_param(&params, "text")?)?;
             Ok(Value::Null)

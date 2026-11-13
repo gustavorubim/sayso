@@ -77,7 +77,10 @@ where
 }
 
 /// Starts recording. Returns once the device is actually capturing.
-pub fn start(device_name: Option<String>) -> Result<Recorder, String> {
+///
+/// With `live`, 16 kHz audio is also sent down the channel every 50 ms while recording; the
+/// channel closes when the recording ends.
+pub fn start(device_name: Option<String>, live: Option<mpsc::Sender<Vec<f32>>>) -> Result<Recorder, String> {
     let stop = Arc::new(AtomicBool::new(false));
     let (ready_tx, ready_rx) = mpsc::channel::<Result<(), String>>();
 
@@ -121,6 +124,30 @@ pub fn start(device_name: Option<String>) -> Result<Recorder, String> {
 
         let started = Instant::now();
         let window = (rate as usize / 20).max(1); // 50 ms
+                                                  // Streaming resampler for live chunks: it carries filter state from one chunk to the next.
+        let streamer = if live.is_some() && rate != SAMPLE_RATE {
+            sherpa_onnx::LinearResampler::create(rate as i32, SAMPLE_RATE as i32)
+        } else {
+            None
+        };
+        let mut sent = 0usize;
+        let mut send_fresh = |last: bool| {
+            let Some(tx) = &live else { return };
+            let fresh: Vec<f32> = {
+                let buf = buffer.lock().unwrap();
+                let fresh = buf[sent..].to_vec();
+                sent = buf.len();
+                fresh
+            };
+            if fresh.is_empty() && !last {
+                return;
+            }
+            let chunk = match &streamer {
+                Some(r) => r.resample(&fresh, last),
+                None => linear_resample(&fresh, rate, SAMPLE_RATE),
+            };
+            let _ = tx.send(chunk);
+        };
         while !stop_flag.load(Ordering::SeqCst) && started.elapsed().as_secs() < MAX_SECONDS {
             std::thread::sleep(Duration::from_millis(50));
             let level = {
@@ -129,8 +156,10 @@ pub fn start(device_name: Option<String>) -> Result<Recorder, String> {
                 rms(tail)
             };
             rpc::emit("level", level);
+            send_fresh(false);
         }
         drop(stream);
+        send_fresh(true);
 
         let samples = std::mem::take(&mut *buffer.lock().unwrap());
         Ok(resample(&samples, rate))

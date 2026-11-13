@@ -15,7 +15,7 @@ const cargoPath = 'core/Cargo.toml'
 const cargo = readFileSync(cargoPath, 'utf8')
 // Only the first `version = ` line, which belongs to [package].
 writeFileSync(cargoPath, cargo.replace(/^version = ".*"$/m, `version = "${version}"`))
-execSync('cargo update --manifest-path core/Cargo.toml --package shortcut-to-text-core', { stdio: 'inherit' })
+execSync('cargo update --manifest-path core/Cargo.toml --package sayso-core', { stdio: 'inherit' })
 
 console.log(`\nVersion set to ${version}. Next:`)
 console.log(`  1. Add a "${version}" section to CHANGELOG.md`)

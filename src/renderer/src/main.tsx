@@ -1,4 +1,4 @@
-import '@fontsource-variable/bricolage-grotesque'
+import '@fontsource-variable/fredoka'
 import './styles.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
