@@ -5,6 +5,8 @@ follow [Semantic Versioning](https://semver.org).
 
 ## Unreleased
 
+## 0.2.0
+
 ### Added
 
 - Update notice in the sidebar: "Restart to update" once a new version has downloaded (Windows, Linux AppImage),
