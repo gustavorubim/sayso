@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  core:
+    name: Core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libx11-dev libxi-dev libxtst-dev libxdo-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      - name: Format
+        if: runner.os == 'Linux'
+        run: cargo fmt --manifest-path core/Cargo.toml -- --check
+
+      - name: Lint
+        run: cargo clippy --manifest-path core/Cargo.toml --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --manifest-path core/Cargo.toml
+
+  app:
+    name: App (typecheck and build)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+  # One required status check for branch protection, whatever the matrix looks like.
+  ci-ok:
+    name: CI passed
+    if: always()
+    needs: [core, app]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [ "${{ needs.core.result }}" != "success" ] || [ "${{ needs.app.result }}" != "success" ]; then
+            echo "A required job failed."
+            exit 1
+          fi
