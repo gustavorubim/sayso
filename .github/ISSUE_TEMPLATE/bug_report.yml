@@ -1,0 +1,45 @@
+name: Bug report
+description: Something doesn't work the way it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Shown at the bottom of the sidebar.
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS (Apple silicon)
+        - macOS (Intel)
+        - Linux (X11)
+        - Linux (Wayland)
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Speech model in use
+      placeholder: Parakeet TDT 0.6B v3
+  - type: input
+    id: target
+    attributes:
+      label: App you were dictating into
+      placeholder: VS Code, Slack, Chrome…
+  - type: textarea
+    id: logs
+    attributes:
+      label: Anything else
+      description: Error messages, screenshots, or terminal output from `npm run dev`.

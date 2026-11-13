@@ -1,0 +1,28 @@
+name: Model request
+description: Ask for a speech model to be added to the catalog
+labels: [model]
+body:
+  - type: input
+    id: model
+    attributes:
+      label: Model on Hugging Face
+      placeholder: https://huggingface.co/owner/model
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why this model?
+      description: Languages, accuracy, speed, size. What does it do better than the ones already offered?
+    validations:
+      required: true
+  - type: input
+    id: onnx
+    attributes:
+      label: ONNX export (if you know one)
+      description: The engine is sherpa-onnx, so a model needs an ONNX export it supports.
+      placeholder: https://huggingface.co/csukuangfj/…
+  - type: input
+    id: license
+    attributes:
+      label: License

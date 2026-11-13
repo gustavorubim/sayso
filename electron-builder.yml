@@ -1,0 +1,51 @@
+appId: com.shortcuttotext.app
+productName: Shortcut to Text
+copyright: Copyright © Shortcut to Text contributors
+
+directories:
+  buildResources: build
+  output: dist
+
+files:
+  - out/**
+  - package.json
+
+# The Rust core is shipped next to the app, outside the asar archive.
+extraResources:
+  - from: core/target/release
+    to: bin
+    filter:
+      - shortcut-to-text-core
+      - shortcut-to-text-core.exe
+
+win:
+  target: nsis
+  artifactName: Shortcut-to-Text-${version}-windows-${arch}-setup.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+  artifactName: Shortcut-to-Text-${version}-mac-${arch}.${ext}
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: Shortcut to Text records your voice while the dictation shortcut is active and turns it into text on this Mac.
+
+linux:
+  category: Utility
+  target:
+    - AppImage
+    - deb
+  artifactName: Shortcut-to-Text-${version}-linux-${arch}.${ext}
+
+publish:
+  provider: github
+  releaseType: draft

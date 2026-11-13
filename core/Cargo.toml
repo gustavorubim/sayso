@@ -1,0 +1,29 @@
+[package]
+name = "shortcut-to-text-core"
+version = "0.1.0"
+description = "Native core for Shortcut to Text: global hotkey, audio capture, local speech-to-text, and paste."
+license = "MIT"
+edition = "2021"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+cpal = "0.16"
+sherpa-onnx = "2.0.1"
+global-hotkey = "0.10"
+ureq = "2.12"
+arboard = "3"
+enigo = "0.6"
+regex = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = true
