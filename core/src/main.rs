@@ -6,12 +6,14 @@
 
 mod app;
 mod audio;
+mod bench;
 mod download;
 mod engine;
 mod history;
 mod hotkey;
 mod models;
 mod paste;
+mod perf;
 mod rewrite;
 mod rpc;
 mod settings;
@@ -21,6 +23,21 @@ use std::path::PathBuf;
 use std::sync::{mpsc, Arc};
 
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("bench") {
+        std::process::exit(bench::run());
+    }
+
+    // If a worker thread panics, state may be half-updated and locks poisoned. Exit so the
+    // shell starts a fresh core instead of talking to a broken one. (Request handlers catch
+    // their own panics first; see rpc.rs.)
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        default_hook(info);
+        if std::thread::current().name() != Some("rpc") {
+            std::process::exit(101);
+        }
+    }));
+
     let data_dir = data_dir_from_args();
     if let Err(e) = std::fs::create_dir_all(&data_dir) {
         eprintln!("cannot create data dir {}: {e}", data_dir.display());
@@ -32,11 +49,14 @@ fn main() {
 
     {
         let app = app.clone();
-        std::thread::spawn(move || {
-            rpc::serve(app);
-            // stdin closed: the shell is gone, so are we.
-            std::process::exit(0);
-        });
+        std::thread::Builder::new()
+            .name("rpc".into())
+            .spawn(move || {
+                rpc::serve(app);
+                // stdin closed: the shell is gone, so are we.
+                std::process::exit(0);
+            })
+            .expect("could not start the request thread");
     }
 
     app.warm_engine();

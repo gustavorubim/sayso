@@ -35,6 +35,12 @@ export function HomePage(s: AppState): React.JSX.Element {
             Choose a speech model
           </button>
         )}
+        {active && s.settings.capture_enabled && (
+          <p className="hero-second">
+            <Keys shortcut={s.settings.capture_shortcut} /> writes down what the computer is playing. Press it again
+            to stop.
+          </p>
+        )}
         {active && s.settings.rewrite_enabled && (
           <p className="hero-second">
             <Keys shortcut={s.settings.rewrite_shortcut} /> does the same, then tidies the wording before writing it.

@@ -15,6 +15,9 @@ function corePath(): string {
   return existsSync(debug) ? debug : release
 }
 
+// Longer than the slowest legitimate call (a rewrite request allows 45 s).
+const CALL_TIMEOUT_MS = 90_000
+
 interface Pending {
   resolve: (value: unknown) => void
   reject: (reason: Error) => void
@@ -86,7 +89,20 @@ export class Core extends EventEmitter {
     if (!child) return Promise.reject(new Error('The speech engine is not running.'))
     const id = this.nextId++
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject })
+      // Never wait forever: if the core stops answering, say so instead of hanging the UI.
+      const timer = setTimeout(() => {
+        if (this.pending.delete(id)) reject(new Error('The speech engine did not answer in time.'))
+      }, CALL_TIMEOUT_MS)
+      this.pending.set(id, {
+        resolve: (value) => {
+          clearTimeout(timer)
+          ;(resolve as (v: unknown) => void)(value)
+        },
+        reject: (reason) => {
+          clearTimeout(timer)
+          reject(reason)
+        }
+      })
       child.stdin.write(`${JSON.stringify({ id, method, params: params ?? null })}\n`)
     })
   }

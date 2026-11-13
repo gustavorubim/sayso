@@ -39,6 +39,9 @@ pub struct Settings {
     pub rewrite_model: String,
     /// How the model should rewrite the dictation.
     pub rewrite_prompt: String,
+    /// Whether the third shortcut, which transcribes the computer's own sound, is active.
+    pub capture_enabled: bool,
+    pub capture_shortcut: String,
 }
 
 pub const DEFAULT_REWRITE_PROMPT: &str = "Fix typos, grammar and punctuation. Rephrase where it makes the text \
@@ -76,11 +79,27 @@ impl Default for Settings {
             },
             rewrite_model: "anthropic/claude-haiku-5.5".into(),
             rewrite_prompt: DEFAULT_REWRITE_PROMPT.into(),
+            capture_enabled: false,
+            capture_shortcut: if cfg!(target_os = "macos") {
+                "Ctrl+Alt+KeyH".into()
+            } else {
+                "Ctrl+Shift+Alt+KeyH".into()
+            },
         }
     }
 }
 
 impl Settings {
+    /// The shortcut for each hotkey slot (dictation, rewrite, computer audio), `None` where
+    /// that feature is off.
+    pub fn shortcuts(&self) -> [Option<String>; 3] {
+        [
+            Some(self.shortcut.clone()),
+            self.rewrite_enabled.then(|| self.rewrite_shortcut.clone()),
+            self.capture_enabled.then(|| self.capture_shortcut.clone()),
+        ]
+    }
+
     pub fn load(path: &Path) -> Self {
         std::fs::read_to_string(path)
             .ok()

@@ -43,9 +43,13 @@ pub fn serve(app: Arc<App>) {
         let id = req.get("id").cloned().unwrap_or(Value::Null);
         let method = req.get("method").and_then(Value::as_str).unwrap_or("").to_string();
         let params = req.get("params").cloned().unwrap_or(Value::Null);
-        match dispatch(&app, &method, params) {
-            Ok(result) => write_line(&json!({ "id": id, "result": result })),
-            Err(error) => write_line(&json!({ "id": id, "error": error })),
+        // A panic in a handler must not kill this thread: the process would stay alive, so
+        // the shell would not restart it, and every later request would hang.
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| dispatch(&app, &method, params)));
+        match outcome {
+            Ok(Ok(result)) => write_line(&json!({ "id": id, "result": result })),
+            Ok(Err(error)) => write_line(&json!({ "id": id, "error": error })),
+            Err(_) => write_line(&json!({ "id": id, "error": "The speech engine hit an internal error." })),
         }
     }
 }
@@ -110,7 +114,11 @@ fn dispatch(app: &Arc<App>, method: &str, params: Value) -> Result<Value, String
         }
         "list_rewrite_models" => to_value(crate::rewrite::list_models()?),
         "toggle_recording" => {
-            app.toggle(false);
+            app.toggle(crate::app::Kind::Dictate);
+            Ok(Value::Null)
+        }
+        "toggle_capture" => {
+            app.toggle(crate::app::Kind::Capture);
             Ok(Value::Null)
         }
         "transcribe_file" => {

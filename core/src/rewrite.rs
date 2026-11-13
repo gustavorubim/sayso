@@ -25,7 +25,37 @@ fn agent(seconds: u64) -> ureq::Agent {
         .timeout_connect(Duration::from_secs(10))
         .timeout(Duration::from_secs(seconds))
         .user_agent(concat!("sayso/", env!("CARGO_PKG_VERSION")))
+        .https_only(true)
         .build()
+}
+
+/// Makes a model's reply safe to paste or type into whatever application has focus.
+///
+/// The reply is not trusted: the model, the service, or words in the audio could all try to
+/// steer it. Typed into a terminal or a chat box, a control character or a newline acts like
+/// a key press. So: control characters are removed, a reply far longer than what was said is
+/// rejected, and the reply may not contain more line breaks than the dictation did.
+pub fn sanitize(reply: &str, original: &str) -> Result<String, String> {
+    let limit = original.chars().count() * 3 + 200;
+    if reply.chars().count() > limit {
+        return Err("The rewrite was far longer than what you said, so it was not used.".into());
+    }
+    let cleaned: String = reply
+        .chars()
+        .map(|c| if c == '\t' || c == '\r' { ' ' } else { c })
+        .filter(|c| *c == '\n' || !c.is_control())
+        .collect();
+    let breaks = |s: &str| s.matches('\n').count();
+    let cleaned = if breaks(&cleaned) > breaks(original) {
+        cleaned.split_whitespace().collect::<Vec<_>>().join(" ")
+    } else {
+        cleaned
+    };
+    let cleaned = cleaned.trim();
+    if cleaned.is_empty() {
+        return Err("The model returned an empty rewrite.".into());
+    }
+    Ok(cleaned.to_string())
 }
 
 /// Pulls the reply text out of a chat completion response.
@@ -76,7 +106,7 @@ pub fn rewrite(key: &str, model: &str, instructions: &str, text: &str) -> Result
             let value: Value = r
                 .into_json()
                 .map_err(|e| format!("Could not read OpenRouter's reply: {e}"))?;
-            extract(&value)
+            sanitize(&extract(&value)?, text)
         }
         Err(ureq::Error::Status(code, r)) => {
             let body: Value = r.into_json().unwrap_or(Value::Null);
@@ -123,6 +153,30 @@ mod tests {
         assert!(extract(&err).unwrap_err().contains("No endpoints found"));
         assert!(extract(&json!({"choices": []})).is_err());
         assert!(extract(&json!({"choices": [{"message": {"content": "  "}}]})).is_err());
+    }
+
+    #[test]
+    fn sanitize_removes_control_characters() {
+        let out = sanitize("Hello\u{1b}[31m there\u{7}.\tNext", "hello there next").unwrap();
+        assert_eq!(out, "Hello[31m there. Next");
+    }
+
+    #[test]
+    fn sanitize_does_not_add_line_breaks() {
+        // One line was dictated; the reply must not turn it into several "Enter" presses.
+        assert_eq!(
+            sanitize("rm -rf /\nyes\n", "please delete the folder").unwrap(),
+            "rm -rf / yes"
+        );
+        // Line breaks the speaker asked for are kept.
+        assert_eq!(sanitize("First.\nSecond.", "first\nsecond").unwrap(), "First.\nSecond.");
+    }
+
+    #[test]
+    fn sanitize_rejects_runaway_replies() {
+        let long = "word ".repeat(500);
+        assert!(sanitize(&long, "a short sentence").is_err());
+        assert!(sanitize("  \u{0} ", "something").is_err());
     }
 
     #[test]

@@ -36,6 +36,8 @@ Two variations on this path:
 
 - **Writing as you speak.** The recorder also streams 16 kHz audio to a worker (`App::live_worker`) that runs the
   voice-activity model on it and performs steps 4–6 for each utterance as soon as the speaker pauses.
+- **Computer audio.** The third shortcut records the default output device (a WASAPI loopback on Windows)
+  through the same live path. Audio is streamed to the worker and dropped, so memory stays flat on long calls.
 - **Rewrite shortcut.** Between steps 5 and 6, `rewrite.rs` sends the text to OpenRouter and the reply is delivered
   instead. If the request fails, the plain transcript is delivered and the error is shown.
 
@@ -76,8 +78,14 @@ Everything lives in Electron's per-user data folder (`%APPDATA%/sayso`,
 
 ## Security model
 
-- The renderer is sandboxed with context isolation; it can only call the methods exposed in `src/preload`.
-- External links open in the system browser and only for `huggingface.co` and `github.com`.
+- The renderer is sandboxed with context isolation. It can call only the core methods listed in
+  `RENDERER_METHODS` in `src/main/index.ts`, and only from the app's own pages. Starting a recording, reading a
+  file, and handing over the API key are reachable from the main process alone.
+- Windows cannot navigate away from the app's pages or open new windows, and all browser permission requests are
+  denied.
+- Model files are pinned to a repository revision and verified against SHA-256 checksums in `core/src/models.rs`.
+- A rewrite reply is treated as untrusted: see `sanitize` in `core/src/rewrite.rs`.
+- External links open in the system browser and only for `huggingface.co`, `github.com` and `openrouter.ai`.
 - Network access is limited to model downloads from Hugging Face, update checks against GitHub Releases, and —
   only when the rewrite shortcut is used — a request to OpenRouter carrying the transcribed text.
 - The OpenRouter key is encrypted with Electron's `safeStorage`. The interface can set or remove it but cannot

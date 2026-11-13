@@ -36,7 +36,7 @@ function Overlay(): React.JSX.Element {
               <i key={i} style={{ height: `${Math.max(12, l * 100)}%` }} />
             ))}
           </span>
-          <span className="pill-text">Listening</span>
+          <span className="pill-text">{status.message === 'computer audio' ? 'Hearing' : 'Listening'}</span>
         </>
       )}
       {status.phase === 'transcribing' && (

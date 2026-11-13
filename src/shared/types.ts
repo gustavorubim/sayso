@@ -27,6 +27,8 @@ export interface Settings {
   rewrite_shortcut: string
   rewrite_model: string
   rewrite_prompt: string
+  capture_enabled: boolean
+  capture_shortcut: string
 }
 
 export interface ModelInfo {
@@ -108,6 +110,7 @@ export interface CoreMethods {
   list_rewrite_models: { params: void; result: string[] }
   rewrite_text: { params: { text: string }; result: string }
   toggle_recording: { params: void; result: null }
+  toggle_capture: { params: void; result: null }
   copy_text: { params: { text: string }; result: null }
 }
 

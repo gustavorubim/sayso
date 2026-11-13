@@ -27,6 +27,8 @@ While you speak, a small indicator at the bottom of the screen shows your voice 
   cancel and resume. Switch whenever you like.
 - **Rewrite shortcut.** An optional second shortcut that dictates and then has a language model tidy the result —
   typos, false starts, clumsy phrasing — using your own [OpenRouter](https://openrouter.ai) key and any model there.
+- **Computer audio.** An optional third shortcut that writes down what you hear through your speakers or
+  headphones — the other side of a call, a video, a podcast — at the cursor, as it is said.
 - **Dictionary.** Fix names and jargon the model gets wrong, or define spoken shortcuts ("my address") that expand
   into longer text.
 - **Spoken line breaks.** Say "new line" or "new paragraph".
@@ -74,6 +76,11 @@ Change the shortcut, choose whether text is written after you finish or as you s
 how text is delivered.
 
 ![The settings screen](docs/images/settings.png)
+
+**Computer audio** (off by default, `Ctrl+Shift+Alt+H`) transcribes what your default sound output is playing
+rather than the microphone, so on a call it writes the other people, not you. It works on Windows, and on Linux
+when the sound system exposes a "Monitor" input; it is not available on macOS yet. Tell people before you
+transcribe a conversation with them; in many places the law requires it.
 
 Writing as you speak always uses press-to-start and press-to-stop. Text is typed while you are still talking, and
 keys held down for hold-to-talk would turn that typing into other shortcuts.

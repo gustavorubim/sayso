@@ -13,6 +13,17 @@ use crate::rpc;
 pub const SAMPLE_RATE: u32 = 16_000;
 /// Hard stop so a forgotten toggle cannot fill memory.
 const MAX_SECONDS: u64 = 15 * 60;
+/// Computer audio is streamed, not buffered, so a long call or video is fine.
+const MAX_CAPTURE_SECONDS: u64 = 4 * 60 * 60;
+
+/// What to record.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Source {
+    /// A microphone by name, or the system default.
+    Microphone(Option<String>),
+    /// Whatever the computer is playing through its default output (speakers or headphones).
+    SystemAudio,
+}
 
 /// An open input stream, its sample buffer, and its sample rate.
 type Capture = (cpal::Stream, Arc<Mutex<Vec<f32>>>, u32);
@@ -52,6 +63,35 @@ fn pick_device(name: Option<&str>) -> Result<cpal::Device, String> {
         .ok_or_else(|| "No microphone found. Plug one in or check your sound settings.".to_string())
 }
 
+/// The device and format for recording what the computer plays.
+#[cfg(windows)]
+fn system_audio() -> Result<(cpal::Device, cpal::SupportedStreamConfig), String> {
+    // WASAPI can open an *output* device for input: that is a loopback of what it plays.
+    let device = cpal::default_host()
+        .default_output_device()
+        .ok_or("No sound output device found.")?;
+    let config = device
+        .default_output_config()
+        .map_err(|e| format!("Could not read the sound output format: {e}"))?;
+    Ok((device, config))
+}
+
+#[cfg(not(windows))]
+fn system_audio() -> Result<(cpal::Device, cpal::SupportedStreamConfig), String> {
+    // PulseAudio and PipeWire expose each output as an input called "Monitor of …".
+    let host = cpal::default_host();
+    let monitor = host.input_devices().ok().and_then(|mut devices| {
+        devices.find(|d| d.name().map(|n| n.to_lowercase().contains("monitor")).unwrap_or(false))
+    });
+    let device = monitor.ok_or(
+        "Capturing computer audio is not available here yet. It works on Windows, and on Linux when a \"Monitor\" input device exists.",
+    )?;
+    let config = device
+        .default_input_config()
+        .map_err(|e| format!("Could not open the monitor device: {e}"))?;
+    Ok((device, config))
+}
+
 fn build_stream<T>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
@@ -80,7 +120,7 @@ where
 ///
 /// With `live`, 16 kHz audio is also sent down the channel every 50 ms while recording; the
 /// channel closes when the recording ends.
-pub fn start(device_name: Option<String>, live: Option<mpsc::Sender<Vec<f32>>>) -> Result<Recorder, String> {
+pub fn start(source: Source, live: Option<mpsc::Sender<Vec<f32>>>) -> Result<Recorder, String> {
     let stop = Arc::new(AtomicBool::new(false));
     let (ready_tx, ready_rx) = mpsc::channel::<Result<(), String>>();
 
@@ -88,10 +128,16 @@ pub fn start(device_name: Option<String>, live: Option<mpsc::Sender<Vec<f32>>>) 
     let handle = std::thread::spawn(move || -> Result<Vec<f32>, String> {
         // The stream is created, used and dropped on this thread: it is not `Send` everywhere.
         let setup = || -> Result<Capture, String> {
-            let device = pick_device(device_name.as_deref())?;
-            let supported = device
-                .default_input_config()
-                .map_err(|e| format!("Could not open the microphone: {e}"))?;
+            let (device, supported) = match &source {
+                Source::Microphone(name) => {
+                    let device = pick_device(name.as_deref())?;
+                    let supported = device
+                        .default_input_config()
+                        .map_err(|e| format!("Could not open the microphone: {e}"))?;
+                    (device, supported)
+                }
+                Source::SystemAudio => system_audio()?,
+            };
             let format = supported.sample_format();
             let config: cpal::StreamConfig = supported.into();
             let rate = config.sample_rate.0;
@@ -130,15 +176,10 @@ pub fn start(device_name: Option<String>, live: Option<mpsc::Sender<Vec<f32>>>) 
         } else {
             None
         };
-        let mut sent = 0usize;
-        let mut send_fresh = |last: bool| {
+        let send_fresh = |last: bool| {
             let Some(tx) = &live else { return };
-            let fresh: Vec<f32> = {
-                let buf = buffer.lock().unwrap();
-                let fresh = buf[sent..].to_vec();
-                sent = buf.len();
-                fresh
-            };
+            // Hand the audio over and forget it: memory stays flat however long this runs.
+            let fresh: Vec<f32> = std::mem::take(&mut *buffer.lock().unwrap());
             if fresh.is_empty() && !last {
                 return;
             }
@@ -148,7 +189,12 @@ pub fn start(device_name: Option<String>, live: Option<mpsc::Sender<Vec<f32>>>) 
             };
             let _ = tx.send(chunk);
         };
-        while !stop_flag.load(Ordering::SeqCst) && started.elapsed().as_secs() < MAX_SECONDS {
+        let limit = if source == Source::SystemAudio {
+            MAX_CAPTURE_SECONDS
+        } else {
+            MAX_SECONDS
+        };
+        while !stop_flag.load(Ordering::SeqCst) && started.elapsed().as_secs() < limit {
             std::thread::sleep(Duration::from_millis(50));
             let level = {
                 let buf = buffer.lock().unwrap();

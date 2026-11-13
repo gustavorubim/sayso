@@ -89,6 +89,28 @@ export function SettingsPage(s: AppState): React.JSX.Element {
       </section>
 
       <section className="block">
+        <h2>Computer audio</h2>
+        <div className="panel">
+          <Toggle
+            label="Transcribe what the computer is playing"
+            hint="A separate shortcut that writes down what you hear through your speakers or headphones: a call, a video, a podcast."
+            checked={settings.capture_enabled}
+            onChange={(v) => void update({ capture_enabled: v })}
+          />
+          <Field
+            label="Computer audio shortcut"
+            hint="Press to start, press again to stop. Text is written at the cursor each time the speaker pauses."
+          >
+            <ShortcutInput value={settings.capture_shortcut} onChange={(shortcut) => update({ capture_shortcut: shortcut })} />
+          </Field>
+        </div>
+        <p className="quiet fine-print">
+          This hears only what the computer plays, so on a call it writes the other people, not you. Tell people before
+          you transcribe a conversation with them; in many places the law requires it.
+        </p>
+      </section>
+
+      <section className="block">
         <h2>Microphone</h2>
         <div className="panel">
           <Field label="Input device">

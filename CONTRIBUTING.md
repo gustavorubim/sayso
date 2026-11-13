@@ -89,8 +89,8 @@ These are set in GitHub, not in the repository, so a maintainer applies them onc
 
 1. Find an ONNX export that [sherpa-onnx](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/index.html) supports,
    hosted on Hugging Face. Prefer `int8` quantized files.
-2. Add a `ModelDef` to `CATALOG` in `core/src/models.rs` with the exact file names and byte sizes from the repository's
-   Files tab, and the matching `Kind`.
+2. Add a `ModelDef` to `CATALOG` in `core/src/models.rs` with the repository's current commit hash as `revision`,
+   and for each file its exact name, byte size and SHA-256 (the Files tab shows all three), plus the matching `Kind`.
 3. If it is a new architecture, add a `Kind` variant and wire it up in `Engine::load` in `core/src/engine.rs`.
 4. Run `npm run core:test`, then download and dictate with it in `npm run dev`.
 5. Add it to the table in `README.md` and state the model's license in the pull request.

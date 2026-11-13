@@ -1,6 +1,19 @@
 import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
-import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, shell } from 'electron'
+import { pathToFileURL } from 'node:url'
+import {
+  BrowserWindow,
+  type IpcMainEvent,
+  type IpcMainInvokeEvent,
+  Menu,
+  Tray,
+  app,
+  ipcMain,
+  nativeImage,
+  screen,
+  session,
+  shell
+} from 'electron'
 import trayIconPath from '../../resources/tray.png?asset'
 import appIconPath from '../../resources/icon.png?asset'
 import type { AppInfo, Settings, Status } from '../shared/types'
@@ -20,6 +33,41 @@ let settings: Settings | null = null
 let overlayTimer: NodeJS.Timeout | null = null
 
 const startHidden = process.argv.includes('--hidden')
+
+// Where the app's own pages live. Anything else is not allowed to load in a window or to
+// call into the main process.
+const devUrl = !app.isPackaged ? process.env['ELECTRON_RENDERER_URL'] : undefined
+const APP_ORIGIN = devUrl ? `${devUrl}/` : pathToFileURL(join(__dirname, '../renderer/')).href
+
+function isAppPage(url: string | undefined): boolean {
+  return typeof url === 'string' && url.startsWith(APP_ORIGIN)
+}
+
+/** Refuses IPC that does not come from one of the app's own pages. */
+function fromApp(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
+  return isAppPage(event.senderFrame?.url)
+}
+
+// The only core methods the interface may call. Everything else the core can do (start a
+// recording, read a file from disk, receive the API key) is reachable from the main process
+// only, so a page that somehow ran foreign script could not use it.
+const RENDERER_METHODS = new Set([
+  'get_settings',
+  'save_settings',
+  'get_default_settings',
+  'get_status',
+  'list_models',
+  'download_model',
+  'cancel_download',
+  'delete_model',
+  'list_input_devices',
+  'get_history',
+  'delete_history_item',
+  'clear_history',
+  'copy_text',
+  'list_rewrite_models',
+  'rewrite_text'
+])
 
 function loadPage(win: BrowserWindow, page: 'index' | 'overlay'): void {
   const devUrl = process.env['ELECTRON_RENDERER_URL']
@@ -56,10 +104,6 @@ function createMainWindow(): BrowserWindow {
       event.preventDefault()
       win.hide()
     }
-  })
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    openExternal(url)
-    return { action: 'deny' }
   })
   loadPage(win, 'index')
   return win
@@ -177,6 +221,10 @@ function createTray(): Tray {
     Menu.buildFromTemplate([
       { label: 'Open Sayso', click: showMainWindow },
       { label: 'Start or stop dictation', click: () => void core.call('toggle_recording').catch(() => {}) },
+      {
+        label: 'Start or stop transcribing computer audio',
+        click: () => void core.call('toggle_capture').catch(() => {})
+      },
       { type: 'separator' },
       {
         label: 'Quit',
@@ -222,7 +270,23 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', showMainWindow)
 
+  // Every window, present and future: never navigate away from the app's own pages (a
+  // dropped file or link would otherwise load with the app's privileges), and never open
+  // new windows. Links go to the system browser through the allowlist in openExternal.
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('will-navigate', (event, url) => {
+      if (!isAppPage(url)) event.preventDefault()
+    })
+    contents.setWindowOpenHandler(({ url }) => {
+      openExternal(url)
+      return { action: 'deny' }
+    })
+  })
+
   app.whenReady().then(async () => {
+    // The interface needs no browser permissions: the microphone is opened by the core.
+    session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
+
     app.setAppUserModelId('com.sayso.app')
 
     core.on('event', (event: string, payload: unknown) => {
@@ -237,24 +301,29 @@ if (!app.requestSingleInstanceLock()) {
     })
     core.start()
 
-    ipcMain.handle('rewrite:has-key', () => loadKey() !== null)
-    ipcMain.handle('rewrite:set-key', async (_e, key: string) => {
+    ipcMain.handle('rewrite:has-key', (e) => fromApp(e) && loadKey() !== null)
+    ipcMain.handle('rewrite:set-key', async (e, key: string) => {
+      if (!fromApp(e)) throw new Error('Not available.')
       const result = saveKey(String(key ?? ''))
       await core.call('set_api_key', { key: loadKey() })
       return result
     })
-    ipcMain.handle('core:call', async (_e, method: string, params: unknown) => {
-      // The key goes through 'rewrite:set-key' so it is always stored encrypted.
-      if (method === 'set_api_key') throw new Error('Not available.')
+    ipcMain.handle('core:call', async (e, method: string, params: unknown) => {
+      if (!fromApp(e) || !RENDERER_METHODS.has(method)) throw new Error('Not available.')
       const result = await core.call(method, params)
       if (method === 'save_settings' || method === 'get_settings') applySettings(result as Settings)
       return result
     })
     ipcMain.handle('app:info', (): AppInfo => ({ version: app.getVersion(), platform: process.platform }))
-    ipcMain.on('app:open-external', (_e, url: string) => openExternal(url))
+    ipcMain.on('app:open-external', (e, url: string) => {
+      if (fromApp(e)) openExternal(url)
+    })
     ipcMain.handle('app:update-state', () => getUpdateState())
-    ipcMain.handle('app:check-updates', () => checkForUpdates())
-    ipcMain.on('app:install-update', () => {
+    ipcMain.handle('app:check-updates', (e) => (fromApp(e) ? checkForUpdates() : getUpdateState()))
+    ipcMain.on('app:install-update', (e) => {
+      // Only when an update is actually waiting: otherwise the app would be left in a
+      // state where closing the window quits it.
+      if (!fromApp(e) || getUpdateState().state !== 'ready') return
       quitting = true
       installUpdate()
     })

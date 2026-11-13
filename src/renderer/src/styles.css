@@ -485,6 +485,10 @@ select {
   font-size: 13.5px;
 }
 
+.hero-second + .hero-second {
+  margin-top: 8px;
+}
+
 .hero-second {
   margin-top: -6px;
   color: var(--muted);

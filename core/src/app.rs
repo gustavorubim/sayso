@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 
-use crate::audio::{self, Recorder, SAMPLE_RATE};
+use crate::audio::{self, Recorder, Source, SAMPLE_RATE};
 use crate::engine::{self, Engine};
 use crate::history::{self, HistoryItem};
 use crate::hotkey::{self, HotkeyCmd};
@@ -34,10 +34,30 @@ pub struct Status {
 }
 
 /// One recording, from shortcut press to delivered text.
+/// What a recording is for, set by the shortcut that started it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Kind {
+    /// Write what was said.
+    Dictate,
+    /// Write what was said after a language model has tidied it.
+    Rewrite,
+    /// Write what the computer is playing (a call, a video), as it is heard.
+    Capture,
+}
+
+impl Kind {
+    fn from_slot(slot: usize) -> Kind {
+        match slot {
+            1 => Kind::Rewrite,
+            2 => Kind::Capture,
+            _ => Kind::Dictate,
+        }
+    }
+}
+
 struct Session {
     recorder: Recorder,
-    /// Started with the rewrite shortcut.
-    rewrite: bool,
+    kind: Kind,
     /// In live mode, the thread that writes text at each pause.
     live: Option<JoinHandle<LiveOutcome>>,
 }
@@ -56,7 +76,7 @@ pub struct App {
     session: Mutex<Option<Session>>,
     engine: Mutex<Option<Engine>>,
     /// One flag per shortcut: 0 is plain dictation, 1 is dictate-and-rewrite.
-    key_down: [AtomicBool; 2],
+    key_down: [AtomicBool; hotkey::SLOTS],
     /// OpenRouter key. Held in memory only; the shell stores it encrypted and passes it in.
     api_key: Mutex<Option<String>>,
     downloads: Mutex<HashMap<String, Arc<AtomicBool>>>,
@@ -78,7 +98,7 @@ impl App {
             phase: Mutex::new(Phase::Idle),
             session: Mutex::new(None),
             engine: Mutex::new(None),
-            key_down: [AtomicBool::new(false), AtomicBool::new(false)],
+            key_down: std::array::from_fn(|_| AtomicBool::new(false)),
             api_key: Mutex::new(None),
             downloads: Mutex::new(HashMap::new()),
             hotkey_tx: Mutex::new(hotkey_tx),
@@ -134,25 +154,33 @@ impl App {
             new.rewrite_prompt = Settings::default().rewrite_prompt;
         }
 
-        let main_key = hotkey::parse(&new.shortcut)?;
-        if new.rewrite_enabled && hotkey::parse(&new.rewrite_shortcut)?.id() == main_key.id() {
-            return Err("The rewrite shortcut must be different from the dictation shortcut.".into());
-        }
-        let rewrite_slot = |s: &Settings| s.rewrite_enabled.then(|| s.rewrite_shortcut.clone());
-        // Free the second shortcut first, so swapping the two never collides.
-        if rewrite_slot(&new) != rewrite_slot(&old) {
-            self.set_hotkey(1, None)?;
-        }
-        if new.shortcut != old.shortcut {
-            if let Err(e) = self.set_hotkey(0, Some(new.shortcut.clone())) {
-                let _ = self.set_hotkey(1, rewrite_slot(&old));
-                return Err(e);
+        let (want, have) = (new.shortcuts(), old.shortcuts());
+        let mut ids = Vec::new();
+        for shortcut in want.iter().flatten() {
+            let id = hotkey::parse(shortcut)?.id();
+            if ids.contains(&id) {
+                return Err("Each shortcut must be different from the others.".into());
             }
+            ids.push(id);
         }
-        if rewrite_slot(&new) != rewrite_slot(&old) {
-            if let Err(e) = self.set_hotkey(1, rewrite_slot(&new)) {
-                let _ = self.set_hotkey(0, Some(old.shortcut.clone()));
-                let _ = self.set_hotkey(1, rewrite_slot(&old));
+        if want != have {
+            // Free the optional shortcuts that are changing first, so swapping two never collides.
+            for slot in 1..hotkey::SLOTS {
+                if want[slot] != have[slot] {
+                    self.set_hotkey(slot, None)?;
+                }
+            }
+            let applied = (0..hotkey::SLOTS)
+                .filter(|&slot| want[slot] != have[slot])
+                .try_for_each(|slot| self.set_hotkey(slot, want[slot].clone()));
+            if let Err(e) = applied {
+                // Put everything back the way it was.
+                for slot in 1..hotkey::SLOTS {
+                    let _ = self.set_hotkey(slot, None);
+                }
+                for (slot, shortcut) in have.iter().enumerate() {
+                    let _ = self.set_hotkey(slot, shortcut.clone());
+                }
                 return Err(e);
             }
         }
@@ -265,6 +293,9 @@ impl App {
 
     /// Transcribes a WAV file with the selected model. Nothing is pasted or saved.
     pub fn transcribe_file(&self, path: &str) -> Result<String, String> {
+        if path.contains('\0') {
+            return Err("That is not a valid file path.".into());
+        }
         let wave = sherpa_onnx::Wave::read(path).ok_or("Could not read that file. Only WAV audio is supported.")?;
         let samples = audio::resample(wave.samples(), wave.sample_rate() as u32);
         let raw = {
@@ -279,6 +310,9 @@ impl App {
     /// Runs a WAV file through the live-writing path as if it were being spoken, and returns
     /// the pieces in the order they would have been written. Nothing is pasted.
     pub fn transcribe_file_live(&self, path: &str) -> Result<Vec<String>, String> {
+        if path.contains('\0') {
+            return Err("That is not a valid file path.".into());
+        }
         let wave = sherpa_onnx::Wave::read(path).ok_or("Could not read that file. Only WAV audio is supported.")?;
         let samples = audio::resample(wave.samples(), wave.sample_rate() as u32);
         let (tx, rx) = mpsc::channel();
@@ -335,14 +369,17 @@ impl App {
     // ---- dictation ------------------------------------------------------
 
     /// Called on the hotkey thread for every press and release.
-    /// `slot` 0 is plain dictation, 1 is dictate-and-rewrite.
     pub fn on_hotkey(self: &Arc<Self>, slot: usize, pressed: bool) {
-        let rewrite = slot == 1;
+        let kind = Kind::from_slot(slot);
         let hold = {
             let s = self.settings.lock().unwrap();
-            // Live writing pastes while you are still speaking, and held modifier keys would
-            // turn that paste into a different shortcut. So live mode is always press-to-toggle.
-            s.mode == "hold" && (rewrite || s.timing != "live")
+            // Anything that writes while sound is still coming in is press-to-toggle: held
+            // modifier keys would turn the paste into a different shortcut.
+            match kind {
+                Kind::Dictate => s.mode == "hold" && s.timing != "live",
+                Kind::Rewrite => s.mode == "hold",
+                Kind::Capture => false,
+            }
         };
         if pressed {
             // Ignore keyboard auto-repeat.
@@ -350,29 +387,29 @@ impl App {
                 return;
             }
             if hold {
-                self.start_recording(rewrite);
+                self.start_recording(kind);
             } else {
-                self.toggle(rewrite);
+                self.toggle(kind);
             }
         } else {
             self.key_down[slot].store(false, Ordering::SeqCst);
             if hold {
-                // Releasing one shortcut must not end a recording the other one started.
-                self.stop_recording(Some(rewrite));
+                // Releasing one shortcut must not end a recording another one started.
+                self.stop_recording(Some(kind));
             }
         }
     }
 
-    pub fn toggle(self: &Arc<Self>, rewrite: bool) {
+    pub fn toggle(self: &Arc<Self>, kind: Kind) {
         let phase = *self.phase.lock().unwrap();
         match phase {
-            Phase::Idle => self.start_recording(rewrite),
+            Phase::Idle => self.start_recording(kind),
             Phase::Recording => self.stop_recording(None),
             Phase::Transcribing => {}
         }
     }
 
-    fn start_recording(self: &Arc<Self>, rewrite: bool) {
+    fn start_recording(self: &Arc<Self>, kind: Kind) {
         let mut phase = self.phase.lock().unwrap();
         if *phase != Phase::Idle {
             return;
@@ -390,21 +427,38 @@ impl App {
             emit_status("error", Some("Download a speech model first".into()));
             return;
         }
-        if rewrite && self.api_key.lock().unwrap().is_none() {
+        if kind == Kind::Rewrite && self.api_key.lock().unwrap().is_none() {
             emit_status("error", Some("Add your OpenRouter API key under Rewrite first".into()));
             return;
         }
 
-        // Live writing needs the voice-activity model to find the pauses.
-        let live = !rewrite && timing == "live" && models::vad_path(&self.models_dir()).is_file();
+        // Writing while the sound is still coming in needs the voice-activity model to find
+        // the pauses. Computer audio is always written that way.
+        let has_vad = models::vad_path(&self.models_dir()).is_file();
+        let live = match kind {
+            Kind::Dictate => timing == "live" && has_vad,
+            Kind::Rewrite => false,
+            Kind::Capture => true,
+        };
+        if kind == Kind::Capture && !has_vad {
+            emit_status(
+                "error",
+                Some("The voice-activity model is missing. Download any speech model again to fetch it.".into()),
+            );
+            return;
+        }
         let (live_tx, live_rx) = if live {
             let (tx, rx) = mpsc::channel();
             (Some(tx), Some(rx))
         } else {
             (None, None)
         };
+        let source = match kind {
+            Kind::Capture => Source::SystemAudio,
+            _ => Source::Microphone(device),
+        };
 
-        match audio::start(device, live_tx) {
+        match audio::start(source, live_tx) {
             Ok(recorder) => {
                 let worker = live_rx.map(|rx| {
                     let app = self.clone();
@@ -418,19 +472,22 @@ impl App {
                 });
                 *self.session.lock().unwrap() = Some(Session {
                     recorder,
-                    rewrite,
+                    kind,
                     live: worker,
                 });
                 *phase = Phase::Recording;
-                emit_status("recording", None);
+                emit_status(
+                    "recording",
+                    (kind == Kind::Capture).then(|| "computer audio".to_string()),
+                );
             }
             Err(e) => emit_status("error", Some(e)),
         }
     }
 
     /// Stops the recording. With `only`, does nothing unless the recording was started by
-    /// that shortcut (`Some(true)` = the rewrite shortcut).
-    fn stop_recording(self: &Arc<Self>, only: Option<bool>) {
+    /// that kind of shortcut.
+    fn stop_recording(self: &Arc<Self>, only: Option<Kind>) {
         let session = {
             let mut phase = self.phase.lock().unwrap();
             if *phase != Phase::Recording {
@@ -438,7 +495,7 @@ impl App {
             }
             let mut session = self.session.lock().unwrap();
             if let (Some(only), Some(current)) = (only, session.as_ref()) {
-                if current.rewrite != only {
+                if current.kind != only {
                     return;
                 }
             }
@@ -494,11 +551,7 @@ impl App {
 
     /// Returns `Ok(true)` if text was delivered, `Ok(false)` if there was nothing to say.
     fn finish_session(&self, session: Session) -> Result<bool, String> {
-        let Session {
-            recorder,
-            rewrite,
-            live,
-        } = session;
+        let Session { recorder, kind, live } = session;
 
         if let Some(worker) = live {
             // Ending the recording closes the audio channel, which lets the worker finish.
@@ -530,7 +583,7 @@ impl App {
             return Ok(false);
         }
 
-        if !rewrite {
+        if kind != Kind::Rewrite {
             paste::deliver(&text, &settings.output, settings.restore_clipboard)?;
             self.remember(&text, duration_ms, false);
             return Ok(true);

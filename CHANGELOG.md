@@ -5,6 +5,28 @@ follow [Semantic Versioning](https://semver.org).
 
 ## Unreleased
 
+### Added
+
+- Computer audio: an optional third shortcut that writes down what the computer is playing (a call, a video),
+  at the cursor, each time the speaker pauses. Windows; Linux where a "Monitor" input exists
+- `sayso-core bench`, a benchmark mode for measuring recognition speed and tuning options
+
+### Security
+
+- Model downloads are pinned to an exact revision and every file is checked against a SHA-256 checksum
+- The interface can only call an explicit list of core methods, and only from the app's own pages
+- Windows can no longer be navigated away from the app or open new windows; browser permissions are denied
+- Rewrite replies are stripped of control characters, cannot add line breaks that were not dictated, and are
+  rejected if far longer than what was said
+- Dictations are kept out of clipboard history and cloud clipboard sync, and are cleared from the clipboard when
+  the previous contents cannot be restored
+- A crash inside a request no longer leaves the speech engine running but unresponsive
+- Downloads and rewrite requests refuse non-HTTPS redirects
+- Packaged apps can no longer be run as a plain Node.js runtime or load code from outside the app archive
+- macOS entitlements reduced to the two the app needs
+- Release builds verify the speech engine's checksum, compile before any signing secret is available, pin
+  third-party actions to commit hashes, and no longer use a build cache
+
 ## 0.3.0
 
 ### Changed

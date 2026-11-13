@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 use crate::app::App;
 use crate::models::{self, ModelDef};
@@ -81,11 +82,14 @@ fn download_model(app: &App, model: &ModelDef, total: u64, cancel: &AtomicBool) 
         }
     };
 
-    for (name, size) in model.files {
+    for (name, size, sha256) in model.files {
         let dest = dir.join(name);
         if !dest.is_file() {
             let base = done_before;
-            fetch(&model.file_url(name), &dest, cancel, &mut |n| report(base + n))?;
+            let expected = Expected { size: *size, sha256 };
+            fetch(&model.file_url(name), &dest, &expected, cancel, &mut |n| {
+                report(base + n)
+            })?;
         }
         done_before += size;
     }
@@ -98,13 +102,18 @@ fn download_model(app: &App, model: &ModelDef, total: u64, cancel: &AtomicBool) 
             let _ = fs::create_dir_all(parent);
         }
         let url = format!(
-            "{}/{}/resolve/main/{}",
+            "{}/{}/resolve/{}/{}",
             models::HF_BASE,
             models::VAD_REPO,
+            models::VAD_REVISION,
             models::VAD_FILE
         );
         let base = done_before;
-        if let Err(e) = fetch(&url, &vad, cancel, &mut |n| report(base + n)) {
+        let expected = Expected {
+            size: models::VAD_SIZE,
+            sha256: models::VAD_SHA256,
+        };
+        if let Err(e) = fetch(&url, &vad, &expected, cancel, &mut |n| report(base + n)) {
             if e == CANCELLED {
                 return Err(e);
             }
@@ -114,18 +123,41 @@ fn download_model(app: &App, model: &ModelDef, total: u64, cancel: &AtomicBool) 
     Ok(())
 }
 
-/// Downloads `url` to `dest` through a `.part` file, resuming if one exists.
-fn fetch(url: &str, dest: &Path, cancel: &AtomicBool, on_bytes: &mut dyn FnMut(u64)) -> Result<(), String> {
+/// What a downloaded file must be: its exact size and SHA-256.
+struct Expected<'a> {
+    size: u64,
+    sha256: &'a str,
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Downloads `url` to `dest` through a `.part` file, resuming if one exists. The finished
+/// file is only kept if it matches `expected`.
+fn fetch(
+    url: &str,
+    dest: &Path,
+    expected: &Expected,
+    cancel: &AtomicBool,
+    on_bytes: &mut dyn FnMut(u64),
+) -> Result<(), String> {
     let part = dest.with_extension(match dest.extension().and_then(|e| e.to_str()) {
         Some(ext) => format!("{ext}.part"),
         None => "part".to_string(),
     });
-    let existing = fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
+    let mut existing = fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
+    if existing >= expected.size {
+        // A leftover that is already as long as the whole file cannot be resumed.
+        let _ = fs::remove_file(&part);
+        existing = 0;
+    }
 
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(20))
         .timeout_read(Duration::from_secs(60))
         .user_agent(concat!("sayso/", env!("CARGO_PKG_VERSION")))
+        .https_only(true)
         .build();
     let mut request = agent.get(url);
     if existing > 0 {
@@ -149,6 +181,13 @@ fn fetch(url: &str, dest: &Path, cancel: &AtomicBool, on_bytes: &mut dyn FnMut(u
     }
     .map_err(|e| format!("Could not write to disk: {e}"))?;
 
+    // The checksum covers the whole file, so a resumed download starts by hashing what is
+    // already on disk.
+    let mut hasher = Sha256::new();
+    if resumed {
+        let mut earlier = File::open(&part).map_err(|e| format!("Could not read the partial download: {e}"))?;
+        std::io::copy(&mut earlier, &mut hasher).map_err(|e| format!("Could not read the partial download: {e}"))?;
+    }
     let mut downloaded = if resumed { existing } else { 0 };
     let mut reader = response.into_reader();
     let mut buf = vec![0u8; 256 * 1024];
@@ -164,11 +203,21 @@ fn fetch(url: &str, dest: &Path, cancel: &AtomicBool, on_bytes: &mut dyn FnMut(u
         }
         file.write_all(&buf[..n])
             .map_err(|e| format!("Could not write to disk: {e}"))?;
+        hasher.update(&buf[..n]);
         downloaded += n as u64;
+        if downloaded > expected.size {
+            drop(file);
+            let _ = fs::remove_file(&part);
+            return Err("The download is larger than it should be, so it was discarded.".into());
+        }
         on_bytes(downloaded);
     }
     file.flush().map_err(|e| format!("Could not write to disk: {e}"))?;
     drop(file);
+    if downloaded != expected.size || hex(&hasher.finalize()) != expected.sha256 {
+        let _ = fs::remove_file(&part);
+        return Err("The downloaded file did not match its checksum, so it was discarded. Try again.".into());
+    }
     fs::rename(&part, dest).map_err(|e| format!("Could not finish the download: {e}"))
 }
 

@@ -7,8 +7,9 @@ on:
   push:
     tags: ['v*.*.*']
 
+# Read-only by default; the two jobs that touch the release ask for write access themselves.
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,8 +18,10 @@ jobs:
   draft:
     name: Create draft release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Tag must match package.json
         run: |
@@ -40,20 +43,30 @@ jobs:
     name: Build (${{ matrix.name }})
     needs: draft
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: Windows x64
             os: windows-latest
+            engine: sherpa-onnx-v2.0.1-win-x64-static-MT-Release-lib.tar.bz2
+            engine_sha256: 23e7b986b197eda0bbc47ff3d7d5c87afd6ef2b9077214ba26b0f1ec52ef0e66
           - name: macOS Apple silicon
             os: macos-latest
+            engine: sherpa-onnx-v2.0.1-osx-arm64-static-lib.tar.bz2
+            engine_sha256: d7a9b14f337958e7373c8c650f046df33d210bbaff2f33cb8322dda663ee5e1c
           - name: macOS Intel
             os: macos-15-intel
+            engine: sherpa-onnx-v2.0.1-osx-x64-static-lib.tar.bz2
+            engine_sha256: 6a3cb3c14104d3a02e7b2a6cd5621f590b14892cce7d0bc0935f7655ef518938
           - name: Linux x64
             os: ubuntu-22.04
+            engine: sherpa-onnx-v2.0.1-linux-x64-static-lib.tar.bz2
+            engine_sha256: 55cfadf65ba50d0afc1a802b7a337942819e51c94a5b5a384def1978f7c70871
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Linux libraries
         if: runner.os == 'Linux'
@@ -61,24 +74,46 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y pkg-config libasound2-dev libx11-dev libxi-dev libxtst-dev libxdo-dev
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core
-
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: npm
 
       - run: npm ci
 
-      # Optional code signing. A secret that is not set arrives as an empty string, and an
-      # empty CSC_LINK makes electron-builder fail, so only export the ones that have a value.
-      - name: Enable code signing when secrets are set
+      # The speech engine is a prebuilt native library that gets linked into the app. Fetch
+      # it here and check it against a known checksum, so a replaced upstream file cannot end
+      # up in an installer. Update `engine` and `engine_sha256` when bumping sherpa-onnx.
+      - name: Fetch and verify the speech engine
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/engine"
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/engine/${{ matrix.engine }}" \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/${{ matrix.engine }}"
+          actual=$(openssl dgst -sha256 "$RUNNER_TEMP/engine/${{ matrix.engine }}" | awk '{print $NF}')
+          if [ "$actual" != "${{ matrix.engine_sha256 }}" ]; then
+            echo "Checksum mismatch for ${{ matrix.engine }}: got $actual"
+            exit 1
+          fi
+          echo "SHERPA_ONNX_ARCHIVE_DIR=$RUNNER_TEMP/engine" >> "$GITHUB_ENV"
+
+      # Compile everything before any secret is in reach: build scripts of dependencies run
+      # here and must not be able to see signing credentials.
+      - name: Build the core and the interface
+        run: |
+          npm run core:release
+          npm run build
+
+      # Only the packaging step sees the token and the optional signing secrets. A secret
+      # that is not set arrives as an empty string, and an empty CSC_LINK makes
+      # electron-builder fail, so drop the empty ones first.
+      - name: Package and upload installers
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -86,13 +121,8 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
-            value="${!name}"
-            if [ -n "$value" ]; then
-              echo "$name=$value" >> "$GITHUB_ENV"
+            if [ -z "${!name}" ]; then
+              unset "$name"
             fi
           done
-
-      - name: Build and upload installers
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: npm run release
+          npx electron-builder --publish always

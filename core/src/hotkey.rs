@@ -3,7 +3,7 @@
 //! Hotkeys must be registered and pumped on one thread — the main thread on
 //! macOS — so this module owns the main thread for the life of the process.
 //!
-//! There are two slots: 0 is plain dictation, 1 is dictate-and-rewrite.
+//! There are three slots: 0 is plain dictation, 1 is dictate-and-rewrite, 2 is computer audio.
 
 use std::str::FromStr;
 use std::sync::mpsc::{Receiver, Sender};
@@ -15,7 +15,7 @@ use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 use crate::app::App;
 use crate::rpc;
 
-pub const SLOTS: usize = 2;
+pub const SLOTS: usize = 3;
 
 pub enum HotkeyCmd {
     /// Register `shortcut` in a slot, or clear the slot with `None`. The result is sent back.
@@ -73,19 +73,11 @@ pub fn run(app: Arc<App>, commands: Receiver<HotkeyCmd>) -> ! {
         slots: [None; SLOTS],
     };
 
-    let (main, rewrite) = {
-        let s = app.settings.lock().unwrap();
-        (
-            s.shortcut.clone(),
-            s.rewrite_enabled.then(|| s.rewrite_shortcut.clone()),
-        )
-    };
-    if let Err(e) = registered.set(0, Some(&main)) {
-        rpc::emit("hotkey-error", e);
-    }
-    if let Some(rewrite) = rewrite {
-        if let Err(e) = registered.set(1, Some(&rewrite)) {
-            rpc::emit("hotkey-error", e);
+    for (slot, shortcut) in app.settings.lock().unwrap().clone().shortcuts().into_iter().enumerate() {
+        if let Some(shortcut) = shortcut {
+            if let Err(e) = registered.set(slot, Some(&shortcut)) {
+                rpc::emit("hotkey-error", e);
+            }
         }
     }
 

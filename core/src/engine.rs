@@ -57,15 +57,44 @@ fn path(dir: &Path, file: &str) -> Option<String> {
     Some(dir.join(file).to_string_lossy().into_owned())
 }
 
-fn threads() -> i32 {
+fn default_threads() -> i32 {
     std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(2)
         .clamp(1, 4) as i32
 }
 
+/// Tuning knobs for the recognizer. `Default` is what the app ships with.
+#[derive(Clone, Debug)]
+pub struct EngineOptions {
+    pub threads: i32,
+    /// ONNX Runtime execution provider: `cpu`, `cuda`, `directml`, `coreml`…
+    pub provider: String,
+    /// Whisper only: frames of silence appended to the audio. -1 lets sherpa-onnx decide.
+    pub whisper_tail_paddings: i32,
+}
+
+impl Default for EngineOptions {
+    fn default() -> Self {
+        Self {
+            threads: default_threads(),
+            provider: "cpu".into(),
+            whisper_tail_paddings: -1,
+        }
+    }
+}
+
 impl Engine {
     pub fn load(model: &ModelDef, models_dir: &Path, language: &str) -> Result<Engine, String> {
+        Self::load_with(model, models_dir, language, &EngineOptions::default())
+    }
+
+    pub fn load_with(
+        model: &ModelDef,
+        models_dir: &Path,
+        language: &str,
+        options: &EngineOptions,
+    ) -> Result<Engine, String> {
         let dir = model.dir(models_dir);
         if !model.is_installed(models_dir) {
             return Err(format!("{} is not downloaded yet.", model.name));
@@ -77,8 +106,8 @@ impl Engine {
             ..Default::default()
         };
         let m = &mut config.model_config;
-        m.num_threads = threads();
-        m.provider = Some("cpu".into());
+        m.num_threads = options.threads;
+        m.provider = Some(options.provider.clone());
         m.debug = false;
 
         match model.kind {
@@ -96,7 +125,7 @@ impl Engine {
                     language.clone()
                 });
                 m.whisper.task = Some("transcribe".into());
-                m.whisper.tail_paddings = -1;
+                m.whisper.tail_paddings = options.whisper_tail_paddings;
                 m.tokens = path(&dir, tokens);
             }
             Kind::Transducer {
