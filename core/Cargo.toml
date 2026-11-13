@@ -1,6 +1,6 @@
 [package]
 name = "shortcut-to-text-core"
-version = "0.1.0"
+version = "0.1.1"
 description = "Native core for Shortcut to Text: global hotkey, audio capture, local speech-to-text, and paste."
 license = "MIT"
 edition = "2021"

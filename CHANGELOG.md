@@ -5,6 +5,16 @@ follow [Semantic Versioning](https://semver.org).
 
 ## Unreleased
 
+## 0.1.1
+
+### Fixed
+
+- macOS installers now build when no code-signing secrets are configured
+
+### Added
+
+- Screenshots in the README
+
 ## 0.1.0
 
 First version.

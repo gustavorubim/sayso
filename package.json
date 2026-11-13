@@ -1,6 +1,6 @@
 {
   "name": "shortcut-to-text",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Hold a shortcut, speak, and the text lands where your cursor is. Local speech-to-text with models from Hugging Face.",
   "main": "./out/main/index.js",
   "author": "gustavorubim <gustavorubim@users.noreply.github.com>",
