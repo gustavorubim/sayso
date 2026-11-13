@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DownloadProgress, HistoryItem, ModelInfo, Settings, Status, UpdateState } from '../../shared/types'
 import brandIcon from '../../../resources/icon.png'
+import { PageBoundary } from './components'
 import { errorText } from './format'
 import { DictionaryPage } from './pages/Dictionary'
 import { HistoryPage } from './pages/History'
@@ -212,12 +213,14 @@ export function App(): React.JSX.Element {
       </nav>
 
       <main className="main">
-        {page === 'home' && <HomePage {...state} />}
-        {page === 'models' && <ModelsPage {...state} />}
-        {page === 'rewrite' && <RewritePage {...state} />}
-        {page === 'dictionary' && <DictionaryPage {...state} />}
-        {page === 'history' && <HistoryPage {...state} />}
-        {page === 'settings' && <SettingsPage {...state} />}
+        <PageBoundary key={page}>
+          {page === 'home' && <HomePage {...state} />}
+          {page === 'models' && <ModelsPage {...state} />}
+          {page === 'rewrite' && <RewritePage {...state} />}
+          {page === 'dictionary' && <DictionaryPage {...state} />}
+          {page === 'history' && <HistoryPage {...state} />}
+          {page === 'settings' && <SettingsPage {...state} />}
+        </PageBoundary>
       </main>
 
       {notice && (

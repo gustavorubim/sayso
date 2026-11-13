@@ -38,6 +38,8 @@ While you speak, a small indicator at the bottom of the screen shows your voice 
   written. It never takes keyboard focus.
 - **Long recordings.** Anything over 25 seconds is split at pauses with a voice-activity model, so there is no length
   limit in practice.
+- **Fast, and stays fast.** Recognition typically takes a fraction of a second, and Sayso asks the system to keep
+  it that way while other programs are busy. See [Performance](#performance).
 - **Lives in the tray**, optionally starting at login, and tells you when an update is ready.
 
 ## Speech models
@@ -56,6 +58,33 @@ While you speak, a small indicator at the bottom of the screen shows your voice 
 
 Models run through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) using 8-bit quantized ONNX exports. Each
 model has its own license; check its model card before commercial use.
+
+## Performance
+
+Measured on a 16-core desktop CPU (Intel i7-13700F), no GPU involved, with the models' 8-bit versions:
+
+| Model | 3-second dictation | 7-second dictation |
+| --- | --- | --- |
+| Parakeet TDT 0.6B v3 | about 0.17 s | about 0.4 s |
+| Whisper Small | about 0.45 s | about 1.0 s |
+| Whisper Large v3 Turbo | about 0.55 s | about 1.1 s |
+
+Those were taken with a flight simulator running on the same machine. Three things keep the numbers there:
+
+- **Priority.** The speech engine is a background process, and Windows slows those down when something else is
+  busy. Sayso opts out. With a game running, a 7-second clip went from about 1.15 s to 0.45 s.
+- **Threads.** Up to six, never more than the machine's physical cores. More than eight made every model slower.
+- **Whisper padding.** Whisper appends silence before recognising; three seconds instead of the engine's longer
+  default roughly halves its time on short dictations, with the same text.
+
+Model choice matters more than any setting: Parakeet, Canary and SenseVoice are several times faster than Whisper
+on the same audio. GPU acceleration was tested and gave no gain with these models, so Sayso runs on the CPU.
+
+To measure your own machine, build from source and run:
+
+```bash
+core/target/release/sayso-core bench --data-dir <your Sayso data folder> --wav speech.wav
+```
 
 ## Rewrite with a language model
 
@@ -85,6 +114,24 @@ transcribe a conversation with them; in many places the law requires it.
 Writing as you speak always uses press-to-start and press-to-stop. Text is typed while you are still talking, and
 keys held down for hold-to-talk would turn that typing into other shortcuts.
 
+## Privacy and security
+
+- **Audio stays on your computer.** It is held in memory for the length of a dictation and never written to disk
+  or sent anywhere.
+- **The network is used for three things only:** downloading models from Hugging Face, checking GitHub for
+  updates, and — only if you turn on the rewrite shortcut — sending the transcribed text to OpenRouter.
+- **Downloads are verified.** Every model file is pinned to an exact revision and checked against a SHA-256
+  checksum before it is used.
+- **Your OpenRouter key is encrypted** by the operating system's credential store. The interface can set or remove
+  it but cannot read it back.
+- **Rewrite replies are not trusted.** Before a reply is written at your cursor, control characters are removed, it
+  may not add line breaks you did not dictate, and a reply far longer than what you said is discarded.
+- **Dictations are kept out of clipboard history** and cloud clipboard sync.
+- **The interface is locked down.** It runs sandboxed, cannot navigate away from the app, and can call only a fixed
+  list of engine functions; it cannot start a recording by itself.
+
+Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
+
 ## Install
 
 Download the installer for your system from the
@@ -102,6 +149,9 @@ Then open the app, pick a model under **Speech models**, and hold the shortcut (
 Linux, `⌥ Space` on macOS).
 
 Installing a newer version over an existing one replaces it and keeps your models, settings and history.
+
+**Beta versions** appear on the Releases page marked "Pre-release". They are for trying changes early and are not
+offered through the app's own updater unless you are already running a beta.
 
 ### Platform notes
 
@@ -132,6 +182,16 @@ Linux also needs: `sudo apt install pkg-config libasound2-dev libx11-dev libxi-d
 
 To build an installer for the system you are on: `npm run dist` (output in `dist/`).
 
+Before opening a pull request, run what CI runs:
+
+```bash
+npm run check
+```
+
+```bash
+npm run core:test
+```
+
 More in [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## How it is built
@@ -142,14 +202,30 @@ More in [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/ARCHITECTURE.md](docs/ARCHI
 
 The two talk over a small JSON protocol, so the core can be reused by other front ends later.
 
+### How changes are checked
+
+- **Every pull request:** formatting, lint and unit tests for both halves, plus a smoke test that builds the real
+  app, starts it, and has it check itself — the engine runs, every screen opens, the icons are in the package.
+- **Every release:** all of that on Windows, macOS and Linux for the tagged commit, before any installer is built.
+- **Every week:** an audit of the dependencies against known vulnerabilities.
+
 ## Roadmap
 
-- GPU acceleration (CUDA, DirectML, CoreML)
-- Word-by-word text with streaming models, not only at pauses
-- Rewriting with a local language model, with no network at all
-- Per-app settings, such as a different model or style in your code editor
-- Wayland support
-- Signed installers
+Shipped so far: dictation at the cursor, seven downloadable models, writing as you speak, the rewrite shortcut,
+computer-audio transcription, in-app update notices, and the performance and security work described above.
+
+Next, roughly in order:
+
+- **Signed installers** for Windows and macOS, which removes the install warnings and enables self-update on macOS
+- **Computer audio on macOS**, and mixing in the microphone so both sides of a call are written
+- **Word-by-word text** with streaming models, not only at pauses
+- **Rewriting with a local language model**, with no network at all
+- **Per-app settings**, such as a different model or rewrite style in your code editor
+- **Wayland support** on Linux
+- **A transcript window** as an alternative to typing at the cursor for long recordings
+
+Considered and set aside: GPU acceleration. It works, but gave no speed-up with the 8-bit models Sayso uses; it
+would need full-precision models several times the size. It may return if there is demand.
 
 ## License
 

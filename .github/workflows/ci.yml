@@ -10,6 +10,8 @@ on:
   pull_request:
   push:
     branches: [main]
+    # A push that only touches documentation has nothing to build or test.
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
   workflow_call:
   workflow_dispatch:
 

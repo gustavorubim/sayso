@@ -12,6 +12,7 @@ follow [Semantic Versioning](https://semver.org).
 - Tags with a suffix (`v0.5.0-beta.1`) publish as pre-releases that are not offered to stable users
 - The interface is linted with ESLint, formatted with Prettier, and has unit tests
 - A weekly dependency audit opens an issue when a shipped dependency has a known vulnerability
+- The smoke test opens every screen, and a failure on one screen no longer blanks the whole window
 
 ## 0.4.0
 

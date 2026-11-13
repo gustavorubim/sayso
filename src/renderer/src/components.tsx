@@ -1,5 +1,33 @@
-import { useEffect, useState } from 'react'
+import { Component, type ReactNode, useEffect, useState } from 'react'
 import { shortcutFromEvent, shortcutKeys } from './format'
+
+/**
+ * Keeps a failure on one screen from blanking the whole window. The sidebar stays usable,
+ * so the person can go somewhere else or try again.
+ */
+export class PageBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null }
+
+  static getDerivedStateFromError(error: Error): { error: Error } {
+    return { error }
+  }
+
+  render(): ReactNode {
+    if (!this.state.error) return this.props.children
+    return (
+      <div className="page page-error" role="alert">
+        <header className="page-head">
+          <h1>This screen could not be shown</h1>
+          <p>
+            Something went wrong while drawing it. Dictation keeps working. Try another screen, or quit Sayso from the
+            tray and open it again.
+          </p>
+        </header>
+        <p className="quiet fine-print">{this.state.error.message}</p>
+      </div>
+    )
+  }
+}
 
 export function Keys({ shortcut, size = 'md' }: { shortcut: string; size?: 'md' | 'xl' }): React.JSX.Element {
   return (
