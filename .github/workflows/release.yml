@@ -74,13 +74,25 @@ jobs:
 
       - run: npm ci
 
-      - name: Build and upload installers
+      # Optional code signing. A secret that is not set arrives as an empty string, and an
+      # empty CSC_LINK makes electron-builder fail, so only export the ones that have a value.
+      - name: Enable code signing when secrets are set
+        shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
-          # Optional code signing. Without these secrets the installers are unsigned.
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            value="${!name}"
+            if [ -n "$value" ]; then
+              echo "$name=$value" >> "$GITHUB_ENV"
+            fi
+          done
+
+      - name: Build and upload installers
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: npm run release
