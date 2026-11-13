@@ -8,6 +8,12 @@ Speech recognition runs entirely on your computer with open models you choose an
 
 Runs on Windows, macOS and Linux.
 
+![The main window while dictating: the shortcut keys light up and the app is listening](docs/images/listening.png)
+
+While you speak, a small indicator at the bottom of the screen shows your voice level:
+
+![The listening indicator](docs/images/indicator.png)
+
 ## Features
 
 - **One global shortcut.** Hold to talk, or press once to start and again to stop. You pick the keys.
@@ -38,8 +44,17 @@ Runs on Windows, macOS and Linux.
 | [SenseVoice Small](https://huggingface.co/FunAudioLLM/SenseVoiceSmall) | Chinese, Cantonese, English, Japanese, Korean | 240 MB | East Asian languages, very fast |
 | [Moonshine Base](https://huggingface.co/UsefulSensors/moonshine-base) | English | 287 MB | Near-instant short phrases |
 
+![The speech models screen, with the model dropdown and download list](docs/images/models.png)
+
 Models run through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) using 8-bit quantized ONNX exports. Each
 model has its own license; check its model card before commercial use.
+
+## Settings
+
+Change the shortcut, switch between hold-to-talk and press-to-toggle, pick a microphone, and choose how text is
+delivered.
+
+![The settings screen](docs/images/settings.png)
 
 ## Install
 
