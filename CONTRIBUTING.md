@@ -15,10 +15,14 @@ npm run dev
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Builds the Rust core (debug) and starts the app with hot reload |
+| `npm run check` | Everything CI checks on the interface: formatting, lint, types, unit tests |
+| `npm run format` | Reformats the TypeScript and config files with Prettier |
 | `npm run typecheck` | Type-checks the Electron and React code |
+| `npm run test` | Runs the interface unit tests |
 | `npm run core:test` | Runs the Rust unit tests |
 | `npm run build` | Builds the Electron bundles into `out/` |
 | `npm run dist` | Builds an installer for your system into `dist/` |
+| `npm run pack:dir` then `npm run smoke` | Builds the unpacked app and runs its self-check, as CI does |
 | `npm run icons` | Regenerates the app icons |
 
 For Rust formatting and lints, from `core/`: `cargo fmt` and `cargo clippy --all-targets -- -D warnings`.
@@ -54,8 +58,9 @@ environment variable pointing at `cl.exe`. Remove it, or unset it for the sessio
 ## Pull request policy
 
 - **`main` is protected.** Nobody pushes to it directly; every change arrives through a pull request.
-- **CI must pass.** The "CI passed" check covers formatting, lints and tests on Windows, macOS and Linux, plus the
-  TypeScript type-check and build.
+- **CI must pass.** The "CI passed" check covers, for the Rust core, formatting, lints and tests; for the
+  interface, formatting, lint, type-check, unit tests and build; and a smoke test that builds the real app, starts
+  it, and has it check itself. Pull requests run on Linux and Windows; `main` and releases add macOS.
 - **One approving review** from a code owner is required. Authors don't approve their own work.
 - **Squash merge only.** The pull request title becomes the single commit on `main`.
 - **The title must be a [Conventional Commit](https://www.conventionalcommits.org)**; a check enforces this.
@@ -103,9 +108,22 @@ Maintainers cut releases; the pipeline does the building.
 2. Move the "Unreleased" notes in `CHANGELOG.md` under a `0.2.0` heading.
 3. Open a pull request titled `chore: release 0.2.0` and merge it.
 4. Tag the merge commit: `git tag v0.2.0 && git push origin v0.2.0`.
-5. The **Release** workflow builds installers for Windows, macOS (Apple silicon and Intel) and Linux and attaches them
+5. The **Release** workflow first runs the whole CI suite on the tagged commit, including the smoke test on all
+   three systems. Only if that passes does it build installers for Windows, macOS (Apple silicon and Intel) and Linux and attaches them
    to a draft release with generated notes.
 6. Try an installer, edit the notes if needed, and publish the draft.
+
+### Beta releases
+
+To try a build before everyone gets it, release it as a beta: `npm run version:set -- 0.5.0-beta.1`, then tag
+`v0.5.0-beta.1`. The workflow publishes it as a GitHub pre-release. It does not become the "latest" release, and
+the app's updater only offers betas to people already running one. When it holds up, set the version to `0.5.0`
+and tag that.
+
+### Dependency audit
+
+The **Dependency audit** workflow runs every Monday and can be started by hand from the Actions tab. If a
+dependency that ships in the app has a known vulnerability, it opens an issue labelled `security-audit`.
 
 Versions follow [Semantic Versioning](https://semver.org). Signing is optional and switched on by adding the
 `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` repository secrets.

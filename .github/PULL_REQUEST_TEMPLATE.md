@@ -9,7 +9,7 @@
 ## Checklist
 
 - [ ] The PR title is a Conventional Commit (`feat: …`, `fix: …`, `docs: …`)
-- [ ] `npm run typecheck` and `npm run core:test` pass
-- [ ] `cargo fmt` and `cargo clippy -- -D warnings` are clean in `core/`
+- [ ] `npm run check` passes (format, lint, types, interface tests)
+- [ ] `npm run core:test`, `cargo fmt` and `cargo clippy -- -D warnings` are clean in `core/`
 - [ ] User-facing changes are noted under "Unreleased" in `CHANGELOG.md`
 - [ ] New settings, models or protocol methods are documented

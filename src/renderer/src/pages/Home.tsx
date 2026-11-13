@@ -8,8 +8,7 @@ export function HomePage(s: AppState): React.JSX.Element {
   // Live writing is always press-to-toggle (see Settings).
   const hold = s.settings.mode === 'hold' && !liveWriting
   const words = s.history.reduce((sum, h) => sum + h.words, 0)
-  const live =
-    s.status.phase === 'recording' || s.status.phase === 'transcribing' || s.status.phase === 'rewriting'
+  const live = s.status.phase === 'recording' || s.status.phase === 'transcribing' || s.status.phase === 'rewriting'
 
   return (
     <div className="page">
@@ -37,8 +36,8 @@ export function HomePage(s: AppState): React.JSX.Element {
         )}
         {active && s.settings.capture_enabled && (
           <p className="hero-second">
-            <Keys shortcut={s.settings.capture_shortcut} /> writes down what the computer is playing. Press it again
-            to stop.
+            <Keys shortcut={s.settings.capture_shortcut} /> writes down what the computer is playing. Press it again to
+            stop.
           </p>
         )}
         {active && s.settings.rewrite_enabled && (
