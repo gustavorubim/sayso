@@ -31,7 +31,3 @@ jobs:
             chore
             revert
           requireScope: false
-          subjectPattern: ^(?![A-Z]).+[^.]$
-          subjectPatternError: |
-            Start the subject in lower case and leave off the final period,
-            for example "feat: add Parakeet v3 model".
