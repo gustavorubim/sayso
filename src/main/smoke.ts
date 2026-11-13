@@ -63,6 +63,25 @@ export async function runSmokeTest({ core, mainWindow, overlay, iconPaths }: Con
       () => waitFor(mainWindow, "window.stt.call('list_models').then((m) => m.length >= 7, () => false)")
     ],
     [
+      'every screen opens',
+      () =>
+        waitFor(
+          mainWindow,
+          `(async () => {
+            const names = [...document.querySelectorAll('.nav-item')].map((b) => b.textContent)
+            if (names.length < 6) return false
+            for (const name of names) {
+              const item = [...document.querySelectorAll('.nav-item')].find((b) => b.textContent === name)
+              if (!item) return false
+              item.click()
+              await new Promise((resolve) => setTimeout(resolve, 300))
+              if (!document.querySelector('.page') || document.querySelector('.page-error')) return false
+            }
+            return true
+          })()`
+        )
+    ],
+    [
       'the interface cannot start a recording',
       () => waitFor(mainWindow, "window.stt.call('toggle_recording').then(() => false, () => true)", 5_000)
     ]
