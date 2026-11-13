@@ -1,6 +1,6 @@
 [package]
 name = "sayso-core"
-version = "0.3.0"
+version = "0.4.0"
 description = "Native core for Sayso: global hotkey, audio capture, local speech-to-text, and paste."
 license = "MIT"
 edition = "2021"
@@ -16,6 +16,7 @@ ureq = { version = "2.12", features = ["json"] }
 arboard = "3"
 enigo = "0.6"
 regex = "1"
+num_cpus = "1"
 sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]

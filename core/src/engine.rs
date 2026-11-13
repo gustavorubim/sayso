@@ -57,12 +57,19 @@ fn path(dir: &Path, file: &str) -> Option<String> {
     Some(dir.join(file).to_string_lossy().into_owned())
 }
 
+/// Up to six threads, never more than the machine has physical cores.
+///
+/// Measured on a 16-core hybrid CPU: six is 10–15% faster than four on the larger models,
+/// eight is no better, and beyond that work lands on the slow efficiency cores and gets much
+/// slower. Counting physical cores keeps a 4-core laptop at four.
 fn default_threads() -> i32 {
-    std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(2)
-        .clamp(1, 4) as i32
+    num_cpus::get_physical().clamp(1, 6) as i32
 }
+
+/// Whisper appends silence to the audio before recognising it. sherpa-onnx's own default
+/// is long; three seconds (300 frames) roughly halves Whisper's time on short dictations
+/// with identical output in our tests. Shorter than about 1.5 s starts to garble the text.
+const WHISPER_TAIL_PADDINGS: i32 = 300;
 
 /// Tuning knobs for the recognizer. `Default` is what the app ships with.
 #[derive(Clone, Debug)]
@@ -70,7 +77,7 @@ pub struct EngineOptions {
     pub threads: i32,
     /// ONNX Runtime execution provider: `cpu`, `cuda`, `directml`, `coreml`…
     pub provider: String,
-    /// Whisper only: frames of silence appended to the audio. -1 lets sherpa-onnx decide.
+    /// Whisper only: frames (10 ms each) of silence appended to the audio. -1 lets sherpa-onnx decide.
     pub whisper_tail_paddings: i32,
 }
 
@@ -79,7 +86,7 @@ impl Default for EngineOptions {
         Self {
             threads: default_threads(),
             provider: "cpu".into(),
-            whisper_tail_paddings: -1,
+            whisper_tail_paddings: WHISPER_TAIL_PADDINGS,
         }
     }
 }

@@ -38,6 +38,12 @@ fn main() {
         }
     }));
 
+    // The core has no window, so the system may treat it as background work and park it on
+    // slow cores or behind busier programs. Recognition is what the user is waiting for.
+    if !perf::request_full_speed() && cfg!(windows) {
+        eprintln!("could not opt out of power throttling; recognition may be slower under load");
+    }
+
     let data_dir = data_dir_from_args();
     if let Err(e) = std::fs::create_dir_all(&data_dir) {
         eprintln!("cannot create data dir {}: {e}", data_dir.display());

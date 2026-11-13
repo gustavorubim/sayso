@@ -5,6 +5,16 @@ follow [Semantic Versioning](https://semver.org).
 
 ## Unreleased
 
+## 0.4.0
+
+### Changed
+
+- Faster recognition, most of all when the computer is busy: the speech engine asks Windows not to throttle it
+  and runs at slightly raised priority. With a game running, a 7-second clip went from about 1.15 s to 0.45 s
+- Uses up to six threads (never more than the number of physical cores) instead of four
+- Whisper models append 3 s of silence instead of the engine's longer default, roughly halving their time on
+  short dictations
+
 ### Added
 
 - Computer audio: an optional third shortcut that writes down what the computer is playing (a call, a video),
