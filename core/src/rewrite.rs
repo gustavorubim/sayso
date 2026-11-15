@@ -197,7 +197,13 @@ mod tests {
     #[test]
     fn a_reply_cannot_press_enter_or_send_control_keys() {
         // Typed into a terminal or a chat box, each of these would be a key press.
-        for hostile in ["ok\r\nrm -rf ~\r\n", "fine\u{8}\u{8}\u{8}", "a\u{0}b", "x\u{1b}[2Jy", "one\u{7f}two"] {
+        for hostile in [
+            "ok\r\nrm -rf ~\r\n",
+            "fine\u{8}\u{8}\u{8}",
+            "a\u{0}b",
+            "x\u{1b}[2Jy",
+            "one\u{7f}two",
+        ] {
             let out = sanitize(hostile, "a single spoken line").unwrap();
             assert!(!out.contains('\n'), "{out:?}");
             assert!(out.chars().all(|c| !c.is_control()), "{out:?}");
@@ -214,8 +220,14 @@ mod tests {
     #[test]
     fn dictated_line_breaks_are_kept_up_to_the_number_dictated() {
         let said = "first\nsecond\nthird";
-        assert_eq!(sanitize("First.\nSecond.\nThird.", said).unwrap(), "First.\nSecond.\nThird.");
-        assert_eq!(sanitize("First.\nSecond.\nThird.\nFourth.", said).unwrap(), "First. Second. Third. Fourth.");
+        assert_eq!(
+            sanitize("First.\nSecond.\nThird.", said).unwrap(),
+            "First.\nSecond.\nThird."
+        );
+        assert_eq!(
+            sanitize("First.\nSecond.\nThird.\nFourth.", said).unwrap(),
+            "First. Second. Third. Fourth."
+        );
     }
 
     #[test]

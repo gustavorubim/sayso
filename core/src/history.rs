@@ -50,7 +50,7 @@ mod tests {
             model: "whisper-small".into(),
             duration_ms: 2000,
             words: 2,
-            rewritten: id % 2 == 0,
+            rewritten: id.is_multiple_of(2),
         }
     }
 

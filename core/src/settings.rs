@@ -147,7 +147,10 @@ mod tests {
             model_id: Some("whisper-small".into()),
             language: "pt".into(),
             input_device: Some("Microphone (USB)".into()),
-            replacements: vec![Replacement { from: "línea".into(), to: "line \"one\"\n".into() }],
+            replacements: vec![Replacement {
+                from: "línea".into(),
+                to: "line \"one\"\n".into(),
+            }],
             rewrite_prompt: "Keep it short.".into(),
             capture_enabled: true,
             ..Settings::default()
@@ -164,7 +167,11 @@ mod tests {
         s.capture_enabled = true;
         assert_eq!(
             s.shortcuts(),
-            [Some(s.shortcut.clone()), Some(s.rewrite_shortcut.clone()), Some(s.capture_shortcut.clone())]
+            [
+                Some(s.shortcut.clone()),
+                Some(s.rewrite_shortcut.clone()),
+                Some(s.capture_shortcut.clone())
+            ]
         );
     }
 
@@ -193,10 +200,14 @@ mod tests {
     fn settings_fields_match_the_shared_contract() {
         let contract = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/contract/settings-keys.json");
         let expected: Vec<String> =
-            serde_json::from_str(&std::fs::read_to_string(&contract).expect("tests/contract/settings-keys.json")).unwrap();
+            serde_json::from_str(&std::fs::read_to_string(&contract).expect("tests/contract/settings-keys.json"))
+                .unwrap();
         let value = serde_json::to_value(Settings::default()).unwrap();
         let mut actual: Vec<String> = value.as_object().unwrap().keys().cloned().collect();
         actual.sort();
-        assert_eq!(actual, expected, "update tests/contract/settings-keys.json and src/shared/types.ts together");
+        assert_eq!(
+            actual, expected,
+            "update tests/contract/settings-keys.json and src/shared/types.ts together"
+        );
     }
 }

@@ -288,7 +288,11 @@ mod tests {
             let input = &one_second[..from as usize];
             let out = linear_resample(input, from, to);
             let expected = to as f64;
-            assert!((out.len() as f64 - expected).abs() <= 2.0, "{from}->{to}: {} samples", out.len());
+            assert!(
+                (out.len() as f64 - expected).abs() <= 2.0,
+                "{from}->{to}: {} samples",
+                out.len()
+            );
             assert!(peak(&out) <= 0.5 + 1e-3, "resampling must not make the signal louder");
         }
     }
@@ -296,10 +300,15 @@ mod tests {
     #[test]
     fn resampling_keeps_the_pitch() {
         // A 440 Hz tone at 48 kHz must still be 440 Hz at 16 kHz: count the upward zero crossings.
-        let tone: Vec<f32> = (0..48_000).map(|i| (2.0 * std::f32::consts::PI * 440.0 * i as f32 / 48_000.0).sin()).collect();
+        let tone: Vec<f32> = (0..48_000)
+            .map(|i| (2.0 * std::f32::consts::PI * 440.0 * i as f32 / 48_000.0).sin())
+            .collect();
         for out in [linear_resample(&tone, 48_000, 16_000), resample(&tone, 48_000)] {
             let crossings = out.windows(2).filter(|w| w[0] <= 0.0 && w[1] > 0.0).count();
-            assert!((438..=442).contains(&crossings), "expected about 440 cycles, counted {crossings}");
+            assert!(
+                (438..=442).contains(&crossings),
+                "expected about 440 cycles, counted {crossings}"
+            );
         }
     }
 

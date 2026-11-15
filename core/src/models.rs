@@ -491,7 +491,10 @@ mod tests {
             for (name, size, _) in m.files {
                 let url = m.file_url(name);
                 assert!(url.starts_with("https://huggingface.co/"), "{url}");
-                assert!(url.contains(&format!("/resolve/{}/", m.revision)), "{url} is not pinned to a revision");
+                assert!(
+                    url.contains(&format!("/resolve/{}/", m.revision)),
+                    "{url} is not pinned to a revision"
+                );
                 assert!(!url.contains("/resolve/main/"), "{url} follows a moving branch");
                 assert!(*size > 0, "{}: {name} has no size", m.id);
             }
@@ -506,19 +509,30 @@ mod tests {
         for m in CATALOG {
             let mut names = HashSet::new();
             for (name, _, sha256) in m.files {
-                assert!(sha256.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f')), "{}: {name}", m.id);
+                assert!(
+                    sha256.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f')),
+                    "{}: {name}",
+                    m.id
+                );
                 assert!(names.insert(*name), "{}: {name} listed twice", m.id);
                 // A file name becomes a path inside the model's folder; it must stay there.
                 assert!(!name.contains("..") && !name.starts_with('/') && !name.contains('\\') && !name.contains(':'));
             }
-            assert!(m.id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.'), "{}", m.id);
+            assert!(
+                m.id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.'),
+                "{}",
+                m.id
+            );
         }
     }
 
     #[test]
     fn exactly_one_model_is_recommended_and_it_leads_the_list() {
         assert_eq!(CATALOG.iter().filter(|m| m.recommended).count(), 1);
-        assert!(CATALOG[0].recommended, "the recommended model should be the first choice in the dropdown");
+        assert!(
+            CATALOG[0].recommended,
+            "the recommended model should be the first choice in the dropdown"
+        );
     }
 
     #[test]
@@ -540,8 +554,17 @@ mod tests {
     #[test]
     fn descriptions_are_written_for_people() {
         for m in CATALOG {
-            assert!(m.description.len() >= 40 && m.description.ends_with('.'), "{}: {}", m.id, m.description);
-            assert!(!m.name.is_empty() && !m.languages.is_empty() && m.source.contains('/'), "{}", m.id);
+            assert!(
+                m.description.len() >= 40 && m.description.ends_with('.'),
+                "{}: {}",
+                m.id,
+                m.description
+            );
+            assert!(
+                !m.name.is_empty() && !m.languages.is_empty() && m.source.contains('/'),
+                "{}",
+                m.id
+            );
         }
     }
 
@@ -567,7 +590,14 @@ mod tests {
         let dir = crate::test_support::temp_dir("models");
         let downloading: HashSet<String> = ["whisper-small".to_string()].into();
         let listed = list(&dir, &downloading);
-        assert_eq!(listed.iter().filter(|m| m.downloading).map(|m| m.id).collect::<Vec<_>>(), ["whisper-small"]);
+        assert_eq!(
+            listed
+                .iter()
+                .filter(|m| m.downloading)
+                .map(|m| m.id)
+                .collect::<Vec<_>>(),
+            ["whisper-small"]
+        );
         assert!(find("no-such-model").is_none());
     }
 }

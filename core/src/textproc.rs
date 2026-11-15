@@ -35,10 +35,12 @@ pub fn process(raw: &str, s: &Settings) -> String {
 
     let spaces = Regex::new(r"[ \t]{2,}").unwrap();
     text = spaces.replace_all(&text, " ").into_owned();
-    let text = text.trim();
-    if text.is_empty() {
+    if text.trim().is_empty() {
         return String::new();
     }
+    // Drop stray spaces at the ends, but keep a line break the speaker asked for: ending a
+    // dictation with "new line" should leave the cursor on a new line.
+    let text = text.trim_matches([' ', '\t']);
 
     let mut out = text.to_string();
     if s.trailing_space && !out.ends_with('\n') {
@@ -142,7 +144,10 @@ mod tests {
             remove_fillers: true,
             voice_commands: true,
             trailing_space: true,
-            replacements: vec![Replacement { from: "acme".into(), to: "ACME Corp".into() }],
+            replacements: vec![Replacement {
+                from: "acme".into(),
+                to: "ACME Corp".into(),
+            }],
             ..Settings::default()
         };
         assert_eq!(
@@ -153,31 +158,52 @@ mod tests {
 
     #[test]
     fn a_trailing_space_is_not_added_after_a_line_break() {
-        let s = Settings { voice_commands: true, trailing_space: true, ..base() };
-        assert_eq!(process("first line new line", &s), "first line");
-        assert_eq!(process("done. New paragraph.", &s), "done");
+        let s = Settings {
+            voice_commands: true,
+            trailing_space: true,
+            ..base()
+        };
+        // Ending with "new line" leaves the cursor on a new line, with no space after it.
+        assert_eq!(process("first line new line", &s), "first line\n");
+        assert_eq!(process("done. New paragraph.", &s), "done\n\n");
+        // Starting with one works too.
+        assert_eq!(process("new line second point", &s), "\nsecond point ");
     }
 
     #[test]
     fn replacements_handle_punctuation_and_other_scripts() {
         let s = Settings {
             replacements: vec![
-                Replacement { from: "c plus plus".into(), to: "C++".into() },
-                Replacement { from: "são paulo".into(), to: "São Paulo".into() },
-                Replacement { from: "  ".into(), to: "ignored".into() },
-                Replacement { from: "bye".into(), to: String::new() },
+                Replacement {
+                    from: "c plus plus".into(),
+                    to: "C++".into(),
+                },
+                Replacement {
+                    from: "são paulo".into(),
+                    to: "São Paulo".into(),
+                },
+                Replacement {
+                    from: "  ".into(),
+                    to: "ignored".into(),
+                },
+                Replacement {
+                    from: "bye".into(),
+                    to: String::new(),
+                },
             ],
             ..base()
         };
-        assert_eq!(process("I write C Plus Plus in são paulo, bye", &s), "I write C++ in São Paulo,");
+        assert_eq!(
+            process("I write C Plus Plus in são paulo, bye", &s),
+            "I write C++ in São Paulo,"
+        );
     }
 
     #[test]
     fn text_without_anything_to_change_is_left_alone() {
         let s = base();
-        for text in ["Hello, world.", "Ünïcödé stays.", "数字 123", "tabs\tand  spaces"] {
-            let out = process(text, &s);
-            assert_eq!(out, text.replace("\t", " ").replace("  ", " "));
+        for text in ["Hello, world.", "Ünïcödé stays.", "数字 123", "a single\ttab stays"] {
+            assert_eq!(process(text, &s), text);
         }
     }
 
@@ -189,7 +215,10 @@ mod tests {
 
     #[test]
     fn spaces_and_tabs_are_collapsed_but_line_breaks_survive() {
-        let s = Settings { voice_commands: true, ..base() };
+        let s = Settings {
+            voice_commands: true,
+            ..base()
+        };
         assert_eq!(process("one   two\t\tthree new line four", &s), "one two three\nfour");
     }
 }

@@ -8,12 +8,13 @@
 //! by default. To run them:
 //!
 //! ```text
-//! cargo run -- fetch --data-dir <folder> canary-180m-flash whisper-small
+//! cargo run -- fetch --data-dir <folder> canary-180m-flash whisper-large-v3-turbo
 //! SAYSO_TEST_DATA=<folder> cargo test audio_tests -- --ignored --test-threads=1
 //! ```
 //!
 //! `SAYSO_TEST_MODELS` (comma-separated ids) limits the run to some of the models in that
-//! folder; without it every model found there is tested. CI runs them with two models.
+//! folder; without it every model found there is tested. CI runs them with Canary and
+//! Whisper Large v3 Turbo. Turbo matters: the 0.4.0 bug did not show up on Whisper Small.
 //!
 //! The recordings are in `tests/audio`: `clips` are ordinary dictations of four to eight
 //! seconds, `short` are two to three seconds. Each `.wav` has a `.txt` with the right words.
@@ -50,11 +51,13 @@ fn limits(model: &str) -> Limits {
     Limits { clips, short }
 }
 
-// (clips, short), in percent. See `limits`.
-const CANARY: (f64, f64) = (12.0, 15.0);
-const WHISPER_SMALL: (f64, f64) = (16.0, 18.0);
-const WHISPER_TURBO: (f64, f64) = (12.0, 15.0);
-const PARAKEET: (f64, f64) = (12.0, 15.0);
+// (clips, short), in percent. See `limits`. Measured when written: Canary 2.3 / 5.4,
+// Whisper Turbo 4.5 / 5.4, Whisper Small 6.8 / 5.4, Parakeet Ultra 1.7 / 5.4. With the 0.4.0
+// padding bug Whisper Turbo scored 10.8 / 55.4.
+const CANARY: (f64, f64) = (8.0, 12.0);
+const WHISPER_SMALL: (f64, f64) = (13.0, 12.0);
+const WHISPER_TURBO: (f64, f64) = (10.0, 12.0);
+const PARAKEET: (f64, f64) = (7.0, 12.0);
 
 struct Recording {
     name: String,
