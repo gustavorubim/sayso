@@ -87,6 +87,15 @@ fn emit_status(phase: &'static str, message: Option<String>) {
     rpc::emit("status", Status { phase, message });
 }
 
+/// Reads a WAV file. Anything that is not an ordinary file is refused first: on Windows a
+/// name like `CON` opens the console, and reading from it would wait forever.
+fn read_wave(path: &str) -> Result<sherpa_onnx::Wave, String> {
+    if path.contains('\0') || !std::fs::metadata(path).map(|m| m.is_file()).unwrap_or(false) {
+        return Err("That is not a file that can be read.".into());
+    }
+    sherpa_onnx::Wave::read(path).ok_or_else(|| "Could not read that file. Only WAV audio is supported.".to_string())
+}
+
 impl App {
     pub fn new(data_dir: PathBuf, hotkey_tx: Sender<HotkeyCmd>) -> Self {
         let settings = Settings::load(&data_dir.join("settings.json"));
@@ -293,10 +302,7 @@ impl App {
 
     /// Transcribes a WAV file with the selected model. Nothing is pasted or saved.
     pub fn transcribe_file(&self, path: &str) -> Result<String, String> {
-        if path.contains('\0') {
-            return Err("That is not a valid file path.".into());
-        }
-        let wave = sherpa_onnx::Wave::read(path).ok_or("Could not read that file. Only WAV audio is supported.")?;
+        let wave = read_wave(path)?;
         let samples = audio::resample(wave.samples(), wave.sample_rate() as u32);
         let raw = {
             let mut engine = self.engine.lock().unwrap();
@@ -310,15 +316,18 @@ impl App {
     /// Runs a WAV file through the live-writing path as if it were being spoken, and returns
     /// the pieces in the order they would have been written. Nothing is pasted.
     pub fn transcribe_file_live(&self, path: &str) -> Result<Vec<String>, String> {
-        if path.contains('\0') {
-            return Err("That is not a valid file path.".into());
-        }
-        let wave = sherpa_onnx::Wave::read(path).ok_or("Could not read that file. Only WAV audio is supported.")?;
+        let wave = read_wave(path)?;
         let samples = audio::resample(wave.samples(), wave.sample_rate() as u32);
-        let (tx, rx) = mpsc::channel();
         // 50 ms chunks, the same size the recorder sends.
-        for chunk in samples.chunks(SAMPLE_RATE as usize / 20) {
-            let _ = tx.send(chunk.to_vec());
+        self.transcribe_live(&samples, SAMPLE_RATE as usize / 20)
+    }
+
+    /// Feeds 16 kHz audio through the live-writing path in chunks of `chunk` samples and
+    /// returns the pieces of text in order.
+    pub(crate) fn transcribe_live(&self, samples: &[f32], chunk: usize) -> Result<Vec<String>, String> {
+        let (tx, rx) = mpsc::channel();
+        for piece in samples.chunks(chunk.max(1)) {
+            let _ = tx.send(piece.to_vec());
         }
         drop(tx);
         let mut pieces = Vec::new();
@@ -519,13 +528,13 @@ impl App {
         });
     }
 
-    fn transcribe_samples(&self, samples: &[f32]) -> Result<String, String> {
+    pub(crate) fn transcribe_samples(&self, samples: &[f32]) -> Result<String, String> {
         let mut engine = self.engine.lock().unwrap();
         self.ensure_engine(&mut engine)?;
         Ok(engine.as_ref().expect("engine loaded").transcribe(samples))
     }
 
-    fn remember(&self, text: &str, duration_ms: u64, rewritten: bool) {
+    pub(crate) fn remember(&self, text: &str, duration_ms: u64, rewritten: bool) {
         let (save, model) = {
             let s = self.settings.lock().unwrap();
             (s.save_history, s.model_id.clone().unwrap_or_default())

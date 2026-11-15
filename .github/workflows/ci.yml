@@ -3,8 +3,9 @@ name: CI
 # Runs on every pull request and every push to main. The release workflow also calls it, so
 # nothing is released that has not passed these checks.
 #
-# Pull requests skip macOS to save runner minutes (macOS costs ten times as much on a
-# private repository). Pushes to main, releases, and manual runs cover all three systems.
+# Pull requests skip macOS and the stress tests to stay quick and cheap (macOS costs ten
+# times as much on a private repository). Pushes to main, releases, and manual runs do
+# everything.
 
 on:
   pull_request:
@@ -13,6 +14,13 @@ on:
     # A push that only touches documentation has nothing to build or test.
     paths-ignore: ['**.md', 'docs/**', 'LICENSE']
   workflow_call:
+    inputs:
+      skip-packaged-app:
+        description: >
+          Do not build and smoke-test the app here. The release workflow sets this because
+          it smoke-tests the very installers it is about to publish.
+        type: boolean
+        default: false
   workflow_dispatch:
 
 concurrency:
@@ -24,63 +32,39 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  SYSTEMS: ${{ github.event_name == 'pull_request' && '["ubuntu-22.04","windows-latest"]' || '["ubuntu-22.04","windows-latest","macos-latest"]' }}
 
 jobs:
-  systems:
-    name: Choose systems
-    runs-on: ubuntu-latest
-    outputs:
-      os: ${{ steps.pick.outputs.os }}
-    steps:
-      - id: pick
-        run: echo "os=$SYSTEMS" >> "$GITHUB_OUTPUT"
-
   interface:
-    name: Interface (format, lint, types, tests, build)
-    runs-on: ubuntu-22.04
+    name: Interface (format, lint, types, tests)
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+      - uses: ./.github/actions/prepare
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
+          rust: 'false'
+          node: 'true'
       - name: Format
         run: npm run format:check
       - name: Lint
         run: npm run lint
       - name: Type-check
         run: npm run typecheck
-      - name: Unit tests
+      - name: Tests
         run: npm run test
-      - name: Build
-        run: npm run build
 
   core:
     name: Core (${{ matrix.os }})
-    needs: systems
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(needs.systems.outputs.os) }}
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04","windows-latest"]' || '["ubuntu-22.04","windows-latest","macos-latest"]') }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-
-      - name: Install Linux libraries
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libasound2-dev libx11-dev libxi-dev libxtst-dev libxdo-dev
-
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: ./.github/actions/prepare
         with:
-          components: rustfmt, clippy
-
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          workspaces: core
+          rust-components: rustfmt, clippy
+          rust-cache: debug
 
       - name: Format
         if: runner.os == 'Linux'
@@ -92,104 +76,27 @@ jobs:
       - name: Test
         run: cargo test --manifest-path core/Cargo.toml
 
-  # Builds the app the way a release does, starts it, and has it check itself: the engine
-  # runs, the windows load, the icons are there. This catches packaging mistakes that no
-  # unit test can see. The checks are in src/main/smoke.ts.
-  smoke:
-    name: Packaged app starts and transcribes (${{ matrix.os }})
-    needs: systems
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ fromJSON(needs.systems.outputs.os) }}
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-
-      - name: Install Linux libraries
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libasound2-dev libx11-dev libxi-dev libxtst-dev libxdo-dev xvfb
-
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
-
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          workspaces: core
-          key: release
-
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
-
-      - name: Build the unpacked app
-        run: npm run pack:dir
-
-      # macOS reports a downloaded app with a missing or broken signature as "damaged" and
-      # will not open it. Starting the app from a terminal, as the next step does, does not
-      # show that, so check the signature itself.
-      - name: Check the macOS signature
-        if: runner.os == 'macOS'
-        run: |
-          codesign --verify --deep --strict --verbose=2 dist/mac*/Sayso.app
-          codesign --display --verbose=2 dist/mac*/Sayso.app
-
-      # A small speech model, so the packaged app can be asked to transcribe a real recording.
-      # It is downloaded once per system and kept until the model catalog changes.
-      - name: Restore the speech model
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ runner.temp }}/sayso-smoke-data
-          key: speech-smoke-${{ runner.os }}-${{ hashFiles('core/src/models.rs') }}
-
-      - name: Download the speech model (verified against its checksum)
-        run: npm run models:fetch -- --data-dir "${{ runner.temp }}/sayso-smoke-data" canary-180m-flash
-
-      - name: Start it, run its self-check, and transcribe a recording
-        if: runner.os != 'Linux'
-        env:
-          SAYSO_SMOKE_DATA: ${{ runner.temp }}/sayso-smoke-data
-        run: npm run smoke
-
-      - name: Start it, run its self-check, and transcribe a recording (virtual display)
-        if: runner.os == 'Linux'
-        env:
-          SAYSO_SMOKE_DATA: ${{ runner.temp }}/sayso-smoke-data
-        run: xvfb-run --auto-servernum npm run smoke
-
   # Real recordings through real speech models: accuracy, short recordings, long recordings,
   # other sample rates, silence, and writing as you speak. This is what catches a change that
   # makes dictation worse while every unit test still passes. See core/src/audio_tests.rs.
   #
   # Whisper Large v3 Turbo is here on purpose: the regression shipped in 0.4.0 showed on it
   # and not on smaller Whisper models. Recognition does not depend on the operating system,
-  # so this runs on Linux only; the smoke test above covers each system's packaged engine.
+  # so this runs on Linux only; the smoke test covers each system's packaged engine.
   audio:
-    name: Audio regression tests
+    name: Audio tests
     runs-on: ubuntu-22.04
     env:
       SAYSO_TEST_DATA: ${{ github.workspace }}/.speech-models
       SAYSO_TEST_MODELS: canary-180m-flash,whisper-large-v3-turbo
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-
-      - name: Install Linux libraries
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libasound2-dev libx11-dev libxi-dev libxtst-dev libxdo-dev
-
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
-
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - uses: ./.github/actions/prepare
         with:
-          workspaces: core
+          rust-cache: debug
 
       - name: Restore the speech models
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .speech-models
           key: speech-audio-${{ hashFiles('core/src/models.rs') }}
@@ -199,24 +106,63 @@ jobs:
           cargo run --manifest-path core/Cargo.toml -- fetch --data-dir "$SAYSO_TEST_DATA"
           canary-180m-flash whisper-large-v3-turbo
 
-      - name: Run the audio tests
+      - name: Audio regression tests
         run: cargo test --manifest-path core/Cargo.toml audio_tests -- --ignored --test-threads=1 --nocapture
+
+      # Hundreds of dictations in a row, model switching, ten-minute recordings, hostile
+      # input. Slow, so not on pull requests. See core/src/stress_tests.rs.
+      - name: Stress tests
+        if: github.event_name != 'pull_request'
+        run: cargo test --manifest-path core/Cargo.toml stress_tests -- --ignored --test-threads=1 --nocapture
+
+  # Builds the app the way a release does, starts it, and has it check itself: the engine
+  # runs, every screen opens, the icons are there, a recording is transcribed. Then the engine
+  # process is flooded, crashed and restarted. This catches packaging mistakes that no unit
+  # test can see. The checks are in src/main/smoke.ts and scripts/stress-core.mjs.
+  smoke:
+    name: Packaged app (${{ matrix.os }})
+    # The input does not exist on a pull request or a push, where this must run.
+    if: ${{ !inputs.skip-packaged-app }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04","windows-latest"]' || '["ubuntu-22.04","windows-latest","macos-latest"]') }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: ./.github/actions/prepare
+        with:
+          rust-cache: release
+          node: 'true'
+
+      - name: Build the unpacked app
+        run: npm run pack:dir
+
+      - uses: ./.github/actions/test-packaged-app
 
   # One required status check for branch protection, whatever the matrix looks like.
   ci-ok:
     name: CI passed
     if: always()
-    needs: [interface, core, smoke, audio]
-    runs-on: ubuntu-latest
+    needs: [interface, core, audio, smoke]
+    runs-on: ubuntu-24.04
     steps:
       - name: Check results
         env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+          RESULTS: ${{ needs.interface.result }} ${{ needs.core.result }} ${{ needs.audio.result }}
+          PACKAGED: ${{ needs.smoke.result }}
+          SKIP_PACKAGED: ${{ inputs.skip-packaged-app && 'yes' || 'no' }}
         run: |
-          echo "Job results: $RESULTS"
+          echo "Job results: $RESULTS; packaged app: $PACKAGED (skipping allowed: $SKIP_PACKAGED)"
           for result in $RESULTS; do
             if [ "$result" != "success" ]; then
               echo "A required job did not succeed."
               exit 1
             fi
           done
+          # The packaged-app job may be skipped only when the release workflow asked for
+          # that, because it tests the installers itself. Skipped by accident is a failure.
+          if [ "$PACKAGED" = "success" ]; then exit 0; fi
+          if [ "$PACKAGED" = "skipped" ] && [ "$SKIP_PACKAGED" = "yes" ]; then exit 0; fi
+          echo "The packaged-app job did not run or did not succeed."
+          exit 1

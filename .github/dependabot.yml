@@ -21,7 +21,10 @@ updates:
         update-types: [minor, patch]
 
   - package-ecosystem: github-actions
-    directory: /
+    directories:
+      - /
+      - /.github/actions/prepare
+      - /.github/actions/test-packaged-app
     schedule:
       interval: monthly
     commit-message:

@@ -1,19 +1,24 @@
 name: Release
 
-# Push a tag like v0.2.0 to build installers for Windows, macOS and Linux and
-# attach them to a draft GitHub release. Review the draft, then publish it.
+# Push a tag like v0.2.0 to build installers for Windows, macOS and Linux and attach them
+# to a draft GitHub release. Review the draft, then publish it.
 #
 # A tag with a suffix, like v0.5.0-beta.1, makes a pre-release: it never becomes "latest"
 # and is not offered to people through auto-update unless they already run a beta.
 #
-# Nothing is built until the full CI suite, including the packaged-app smoke test on all
-# three systems, has passed for the tagged commit.
+# What gets published is what was tested. Each system builds its installers once, then the
+# app from that same build is started, checks itself, transcribes a recording and has its
+# engine stressed. Only if that passes are the installers uploaded.
+#
+# Run it by hand from the Actions tab for a rehearsal: everything above happens, nothing is
+# published, and the installers are kept as workflow artifacts for three days.
 
 on:
   push:
     tags: ['v*.*.*']
+  workflow_dispatch:
 
-# Read-only by default; the two jobs that touch the release ask for write access themselves.
+# Read-only by default; the jobs that touch the release ask for write access themselves.
 permissions:
   contents: read
 
@@ -21,14 +26,19 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Unit tests, audio tests and stress tests on the tagged commit. The packaged-app test
+  # is left to the build job below, which runs it on the real installers.
   checks:
     name: Checks
     uses: ./.github/workflows/ci.yml
+    with:
+      skip-packaged-app: true
 
   draft:
     name: Create draft release
+    if: github.event_name == 'push'
     needs: checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
@@ -55,8 +65,10 @@ jobs:
             gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes --title "$GITHUB_REF_NAME" $prerelease
 
   build:
-    name: Build (${{ matrix.name }})
-    needs: draft
+    name: Build and test (${{ matrix.name }})
+    needs: [checks, draft]
+    # The draft job is skipped in a rehearsal; that must not skip the build.
+    if: ${{ !cancelled() && needs.checks.result == 'success' && (needs.draft.result == 'success' || needs.draft.result == 'skipped') }}
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
@@ -80,20 +92,10 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - name: Install Linux libraries
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libasound2-dev libx11-dev libxi-dev libxtst-dev libxdo-dev
-
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
-
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+      # No build cache: what is released is always compiled from scratch.
+      - uses: ./.github/actions/prepare
         with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
+          node: 'true'
 
       # The speech engine is a prebuilt native library that gets linked into the app. Fetch
       # it here and check it against a known checksum, so a replaced upstream file cannot end
@@ -119,14 +121,13 @@ jobs:
           npm run core:release
           npm run build
 
-      # Only the packaging step sees the token and the optional signing secrets. A secret
-      # that is not set arrives as an empty string, and an empty CSC_LINK makes
-      # electron-builder fail, so drop the empty ones first. Without the signing secrets the
-      # macOS app is signed ad hoc; see scripts/package.mjs.
-      - name: Package and upload installers
+      # Only this step sees the optional signing secrets. A secret that is not set arrives
+      # as an empty string, and an empty CSC_LINK makes electron-builder fail, so drop the
+      # empty ones first. Without the signing secrets the macOS app is signed ad hoc; see
+      # scripts/package.mjs. Nothing is uploaded here.
+      - name: Package the installers
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -138,4 +139,42 @@ jobs:
               unset "$name"
             fi
           done
-          node scripts/package.mjs --publish always
+          node scripts/package.mjs --publish never
+
+      # The app that was just packaged, not a separate test build.
+      - uses: ./.github/actions/test-packaged-app
+
+      - name: List what will be published
+        id: files
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(dist/*.exe dist/*.exe.blockmap dist/*.dmg dist/*.dmg.blockmap dist/*.zip dist/*.zip.blockmap dist/*.AppImage dist/*.deb dist/latest*.yml)
+          if [ ${#files[@]} -lt 2 ]; then
+            echo "Expected installers and update metadata in dist/, found: ${files[*]}"
+            exit 1
+          fi
+          printf '%s\n' "${files[@]}"
+          { echo 'list<<EOF'; printf '%s\n' "${files[@]}"; echo 'EOF'; } >> "$GITHUB_OUTPUT"
+
+      - name: Upload to the draft release
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FILES: ${{ steps.files.outputs.list }}
+        run: |
+          # (No `mapfile`: the macOS runner's bash is too old for it.)
+          files=()
+          while IFS= read -r file; do
+            [ -n "$file" ] && files+=("$file")
+          done <<< "$FILES"
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+
+      - name: Keep the installers (rehearsal)
+        if: github.event_name != 'push'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: rehearsal-${{ runner.os }}
+          path: ${{ steps.files.outputs.list }}
+          retention-days: 3

@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use crate::audio::{self, SAMPLE_RATE};
 use crate::engine::{self, Engine, EngineOptions};
-use crate::models::{self, Kind, ModelDef};
+use crate::models::{self, ModelDef};
 
 const SR: usize = SAMPLE_RATE as usize;
 
@@ -22,7 +22,6 @@ struct Args {
     provider: String,
     sections: Option<Vec<String>>,
     background: bool,
-    performance_cores: bool,
     eval: Option<PathBuf>,
     limit: usize,
     whisper_padding: i32,
@@ -36,7 +35,6 @@ fn parse_args() -> Result<Args, String> {
     let mut provider = "cpu".to_string();
     let mut sections = None;
     let mut background = false;
-    let mut performance_cores = false;
     let mut eval = None;
     let mut limit = usize::MAX;
     let mut whisper_padding = EngineOptions::default().whisper_tail_paddings;
@@ -48,7 +46,6 @@ fn parse_args() -> Result<Args, String> {
             "--models" => only = args.next().map(|s| s.split(',').map(str::to_string).collect()),
             "--quick" => quick = true,
             "--background" => background = true,
-            "--performance-cores" => performance_cores = true,
             "--eval" => eval = args.next().map(PathBuf::from),
             "--whisper-padding" => {
                 whisper_padding = args.next().and_then(|n| n.parse().ok()).unwrap_or(whisper_padding)
@@ -67,7 +64,6 @@ fn parse_args() -> Result<Args, String> {
         provider,
         sections,
         background,
-        performance_cores,
         eval,
         limit,
         whisper_padding,
@@ -96,8 +92,9 @@ fn time<T>(runs: usize, mut f: impl FnMut() -> T) -> (f64, T) {
     (times.iter().cloned().fold(f64::INFINITY, f64::min), last.unwrap())
 }
 
+/// Memory this process holds, in megabytes. 0 where it cannot be measured (macOS).
 #[cfg(windows)]
-fn memory_mb() -> f64 {
+pub(crate) fn memory_mb() -> f64 {
     use windows_sys::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
     use windows_sys::Win32::System::Threading::GetCurrentProcess;
     unsafe {
@@ -110,18 +107,24 @@ fn memory_mb() -> f64 {
     0.0
 }
 
-#[cfg(not(windows))]
-fn memory_mb() -> f64 {
-    0.0
+#[cfg(target_os = "linux")]
+pub(crate) fn memory_mb() -> f64 {
+    // "VmRSS:   123456 kB"
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|status| {
+            status
+                .lines()
+                .find(|l| l.starts_with("VmRSS:"))
+                .and_then(|l| l.split_whitespace().nth(1)?.parse::<f64>().ok())
+        })
+        .map(|kb| kb / 1024.0)
+        .unwrap_or(0.0)
 }
 
-/// Word-level difference between two transcripts, as a fraction of the reference length.
-fn word_diff(reference: &str, other: &str) -> f64 {
-    let (errors, words) = word_errors(reference, other);
-    if words == 0 {
-        return if errors == 0 { 0.0 } else { 1.0 };
-    }
-    errors as f64 / words as f64
+#[cfg(not(any(windows, target_os = "linux")))]
+pub(crate) fn memory_mb() -> f64 {
+    0.0
 }
 
 /// Word errors (substitutions, insertions, deletions) in `other`, and the number of words in
@@ -166,10 +169,6 @@ impl Clip {
     }
 }
 
-fn is_whisper(model: &ModelDef) -> bool {
-    matches!(model.kind, Kind::Whisper { .. })
-}
-
 fn load(model: &ModelDef, models_dir: &Path, options: &EngineOptions) -> Result<Engine, String> {
     Engine::load_with(model, models_dir, "en", options)
 }
@@ -188,12 +187,6 @@ pub fn run() -> i32 {
         println!("# running as an ordinary background process");
     } else {
         println!("# full speed requested: {}", crate::perf::request_full_speed());
-    }
-    if args.performance_cores {
-        println!(
-            "# performance cores only: {:?} logical processors",
-            crate::perf::use_performance_cores_only()
-        );
     }
     let models_dir = args.data_dir.join("models");
     let Some(wave) = sherpa_onnx::Wave::read(&args.wav.to_string_lossy()) else {
@@ -413,64 +406,7 @@ pub fn run() -> i32 {
             }
         }
     }
-    // ---- 3. Whisper tail padding ----
-    if wanted("whisper_padding") {
-        println!("\n## whisper_padding\tmodel\ttail_paddings\twarm_3s_ms\twarm_10s_ms\tword_diff_3s\tword_diff_10s");
-        for model in installed.iter().filter(|m| is_whisper(m)) {
-            let mut first: Option<(String, String)> = None;
-            for padding in [-1, 500, 300, 100, 50] {
-                let options = EngineOptions {
-                    whisper_tail_paddings: padding,
-                    ..base.clone()
-                };
-                let Ok(engine) = load(model, &models_dir, &options) else {
-                    continue;
-                };
-                let _ = engine.transcribe(&clips[0].samples);
-                let (t3, text3) = time(runs, || engine.transcribe(&clips[0].samples));
-                let (t10, text10) = time(runs, || engine.transcribe(&clips[1].samples));
-                let (d3, d10) = match &first {
-                    Some((b3, b10)) => (word_diff(b3, &text3), word_diff(b10, &text10)),
-                    None => (0.0, 0.0),
-                };
-                if first.is_none() {
-                    first = Some((text3, text10));
-                }
-                println!(
-                    "whisper_padding\t{}\t{padding}\t{t3:.0}\t{t10:.0}\t{d3:.3}\t{d10:.3}",
-                    model.id
-                );
-            }
-        }
-    }
-    // ---- 4. Trimming silence before recognition ----
-    if wanted("trim") {
-        // A real dictation has dead air at both ends: the key goes down before the first word and
-        // comes up after the last. Simulate 0.6 s of it on each side.
-        println!("\n## trim\tmodel\tclip\tuntrimmed_ms\ttrim_ms\ttrimmed_ms\tsaved_ms\tword_diff");
-        let vad_path = models::vad_path(&models_dir);
-        let pad = vec![0.0f32; SR * 6 / 10];
-        for model in &installed {
-            let Ok(engine) = load(model, &models_dir, &base) else {
-                continue;
-            };
-            let _ = engine.transcribe(&clips[0].samples);
-            for c in &clips[..2] {
-                let padded: Vec<f32> = [pad.as_slice(), c.samples.as_slice(), pad.as_slice()].concat();
-                let (untrimmed, text_a) = time(runs, || engine.transcribe(&padded));
-                let (trim_ms, trimmed) = time(runs, || trim_silence(&padded, &vad_path));
-                let (trimmed_ms, text_b) = time(runs, || engine.transcribe(&trimmed));
-                println!(
-                    "trim\t{}\t{}\t{untrimmed:.0}\t{trim_ms:.0}\t{trimmed_ms:.0}\t{:.0}\t{:.3}",
-                    model.id,
-                    c.name,
-                    untrimmed - trim_ms - trimmed_ms,
-                    word_diff(&text_a, &text_b)
-                );
-            }
-        }
-    }
-    // ---- 5. Pipeline costs outside the model ----
+    // ---- 3. Pipeline costs outside the model ----
     if wanted("pipeline") {
         let vad_path = models::vad_path(&models_dir);
         println!("\n## pipeline\tstep\tmedian_ms\tnote");
@@ -604,8 +540,6 @@ mod tests {
     fn word_errors_with_an_empty_reference() {
         assert_eq!(word_errors("", ""), (0, 0));
         assert_eq!(word_errors("", "two words"), (2, 0));
-        assert_eq!(word_diff("", ""), 0.0);
-        assert_eq!(word_diff("", "anything"), 1.0);
     }
 
     #[test]

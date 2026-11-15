@@ -35,12 +35,12 @@ const SR: usize = SAMPLE_RATE as usize;
 /// scored when the test was written, plus headroom for differences between machines; they
 /// are a tripwire for regressions, not a claim about the model's accuracy. A model without
 /// an entry gets a loose default.
-struct Limits {
-    clips: f64,
-    short: f64,
+pub(crate) struct Limits {
+    pub clips: f64,
+    pub short: f64,
 }
 
-fn limits(model: &str) -> Limits {
+pub(crate) fn limits(model: &str) -> Limits {
     let (clips, short) = match model {
         "canary-180m-flash" => (CANARY.0, CANARY.1),
         "whisper-small" => (WHISPER_SMALL.0, WHISPER_SMALL.1),
@@ -59,13 +59,13 @@ const WHISPER_SMALL: (f64, f64) = (13.0, 12.0);
 const WHISPER_TURBO: (f64, f64) = (10.0, 12.0);
 const PARAKEET: (f64, f64) = (7.0, 12.0);
 
-struct Recording {
-    name: String,
-    samples: Vec<f32>,
-    text: String,
+pub(crate) struct Recording {
+    pub name: String,
+    pub samples: Vec<f32>,
+    pub text: String,
 }
 
-fn data_dir() -> PathBuf {
+pub(crate) fn data_dir() -> PathBuf {
     let dir = std::env::var_os("SAYSO_TEST_DATA")
         .expect("set SAYSO_TEST_DATA to a folder prepared with `sayso-core fetch`; see core/src/audio_tests.rs");
     PathBuf::from(dir)
@@ -76,7 +76,7 @@ fn models_dir() -> PathBuf {
 }
 
 /// The models to test: those named in SAYSO_TEST_MODELS, or every one that is downloaded.
-fn test_models() -> Vec<&'static ModelDef> {
+pub(crate) fn test_models() -> Vec<&'static ModelDef> {
     let wanted: Option<Vec<String>> = std::env::var("SAYSO_TEST_MODELS")
         .ok()
         .map(|s| s.split(',').map(|id| id.trim().to_string()).collect());
@@ -102,7 +102,7 @@ fn test_models() -> Vec<&'static ModelDef> {
     found
 }
 
-fn recordings(kind: &str) -> Vec<Recording> {
+pub(crate) fn recordings(kind: &str) -> Vec<Recording> {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("audio")
@@ -140,7 +140,7 @@ fn engine(model: &ModelDef) -> Arc<Engine> {
         .clone()
 }
 
-fn transcribe(model: &ModelDef, samples: &[f32]) -> String {
+pub(crate) fn transcribe(model: &ModelDef, samples: &[f32]) -> String {
     static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
     let engine = engine(model);
     let _guard = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
@@ -148,7 +148,7 @@ fn transcribe(model: &ModelDef, samples: &[f32]) -> String {
 }
 
 /// Errors per 100 reference words over a set of (reference, transcript) pairs.
-fn error_rate<'a>(pairs: impl IntoIterator<Item = (&'a str, &'a str)>) -> f64 {
+pub(crate) fn error_rate<'a>(pairs: impl IntoIterator<Item = (&'a str, &'a str)>) -> f64 {
     let (mut errors, mut words) = (0, 0);
     for (reference, transcript) in pairs {
         let (e, n) = word_errors(reference, transcript);
@@ -158,7 +158,7 @@ fn error_rate<'a>(pairs: impl IntoIterator<Item = (&'a str, &'a str)>) -> f64 {
     100.0 * errors as f64 / words.max(1) as f64
 }
 
-fn words(text: &str) -> Vec<String> {
+pub(crate) fn words(text: &str) -> Vec<String> {
     text.to_lowercase()
         .split_whitespace()
         .map(|w| {
@@ -182,7 +182,7 @@ fn silence(seconds: f32) -> Vec<f32> {
 }
 
 /// All twelve clips as one recording, with a pause between them.
-fn long_recording() -> (Vec<f32>, String) {
+pub(crate) fn long_recording() -> (Vec<f32>, String) {
     let mut samples = Vec::new();
     let mut text = String::new();
     for r in recordings("clips") {

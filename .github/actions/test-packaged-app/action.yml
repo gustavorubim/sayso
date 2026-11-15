@@ -1,0 +1,54 @@
+name: Test the packaged app
+description: >
+  Takes the app that electron-builder left in dist/ and proves it works: the signature is
+  valid (macOS), it starts and checks itself, it transcribes a recording with a real speech
+  model, and its engine survives a flood of requests and being killed. Used by CI on a test
+  build and by the release workflow on the build it is about to publish.
+
+runs:
+  using: composite
+  steps:
+    # macOS reports a downloaded app with a missing or broken signature as "damaged" and
+    # will not open it. Starting the app from a terminal, as below, does not show that, so
+    # check the signature itself.
+    - name: Check the macOS signature
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        codesign --verify --deep --strict --verbose=2 dist/mac*/Sayso.app
+        codesign --display --verbose=2 dist/mac*/Sayso.app
+
+    # A small speech model, so the app can be asked to transcribe a real recording. It is
+    # downloaded once per system and kept until the model catalog changes. Every file is
+    # checked against its checksum whether it came from the cache or the network.
+    - name: Restore the speech model
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ${{ runner.temp }}/sayso-smoke-data
+        key: speech-smoke-${{ runner.os }}-${{ hashFiles('core/src/models.rs') }}
+
+    - name: Download the speech model
+      shell: bash
+      run: npm run models:fetch -- --data-dir "$RUNNER_TEMP/sayso-smoke-data" canary-180m-flash
+
+    - name: Start the app, run its self-check, and transcribe a recording
+      shell: bash
+      env:
+        SAYSO_SMOKE_DATA: ${{ runner.temp }}/sayso-smoke-data
+      run: |
+        if [ "$RUNNER_OS" = "Linux" ]; then
+          xvfb-run --auto-servernum npm run smoke
+        else
+          npm run smoke
+        fi
+
+    - name: Stress the engine process
+      shell: bash
+      env:
+        SAYSO_SMOKE_DATA: ${{ runner.temp }}/sayso-smoke-data
+      run: |
+        if [ "$RUNNER_OS" = "Linux" ]; then
+          xvfb-run --auto-servernum npm run stress:core
+        else
+          npm run stress:core
+        fi
