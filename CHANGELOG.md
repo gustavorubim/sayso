@@ -3,6 +3,29 @@
 Notable changes to Sayso. The format follows [Keep a Changelog](https://keepachangelog.com), and versions
 follow [Semantic Versioning](https://semver.org).
 
+## Unreleased
+
+### Fixed
+
+- Settings and history are now saved in one step. If the app was killed or the computer lost power while saving,
+  the file could be left half-written and the app would start again with default settings
+- A very short tap on the shortcut could crash the speech engine with some models (Whisper among them)
+- The app now keeps restarting the speech engine if it stops. It used to give up after the third time in a
+  session, however long the session had lasted
+- Asking the engine to transcribe something that is not a file (a device name such as `CON` on Windows) made it
+  stop answering; it is now refused
+- Audio containing values a sound card should never produce (not-a-number, infinities, far out of range) is
+  cleaned before it reaches the speech model
+
+### Changed
+
+- Releases are tested harder. New stress tests cover hundreds of dictations in a row, model switching,
+  ten-minute recordings, hostile audio, a flood of requests, the engine being killed mid-save, and interrupted
+  or corrupted downloads
+- The installers that are published are now the very ones that were tested, and a release can be rehearsed
+  without publishing anything
+- The build pipeline no longer uses the deprecated Node 20 runtime, and duplicated work was removed from it
+
 ## 0.4.3
 
 ### Added

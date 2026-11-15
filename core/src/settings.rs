@@ -109,8 +109,45 @@ impl Settings {
 
     pub fn save(&self, path: &Path) -> Result<(), String> {
         let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
-        std::fs::write(path, json).map_err(|e| format!("Could not save settings: {e}"))
+        write_atomically(path, json.as_bytes()).map_err(|e| format!("Could not save settings: {e}"))
     }
+}
+
+/// Replaces `path` with `contents` in one step: the new contents are written to a temporary
+/// file beside it, which is then renamed over the original. A reader, or a crash, sees
+/// either the old file or the new one, never half of each.
+pub fn write_atomically(path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let tmp = path.with_file_name(format!("{name}.{}.{unique}.tmp", std::process::id()));
+    let result = (|| {
+        let mut file = std::fs::File::create(&tmp)?;
+        file.write_all(contents)?;
+        file.sync_all()?;
+        drop(file);
+        // On Windows a rename can fail for a moment while another program (a virus scanner,
+        // a reader in our own tests) has the destination open.
+        let mut attempt = 0;
+        loop {
+            match std::fs::rename(&tmp, path) {
+                Ok(()) => return Ok(()),
+                Err(e) if attempt < 20 && e.kind() == std::io::ErrorKind::PermissionDenied => {
+                    attempt += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    result
 }
 
 #[cfg(test)]

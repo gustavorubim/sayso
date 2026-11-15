@@ -18,6 +18,10 @@ function corePath(): string {
 // Longer than the slowest legitimate call (a rewrite request allows 45 s).
 const CALL_TIMEOUT_MS = 90_000
 
+// An engine that stops within this long of starting counts as a failed start.
+const STABLE_AFTER_MS = 60_000
+const MAX_QUICK_RESTARTS = 3
+
 interface Pending {
   resolve: (value: unknown) => void
   reject: (reason: Error) => void
@@ -35,8 +39,10 @@ export class Core extends EventEmitter {
   private pending = new Map<number, Pending>()
   private stopping = false
   private restarts = 0
+  private startedAt = 0
 
   start(): void {
+    this.startedAt = Date.now()
     const path = corePath()
     if (!existsSync(path)) {
       this.emit('event', 'core-exit', `Core binary not found at ${path}. Run "npm run core:build".`)
@@ -60,8 +66,17 @@ export class Core extends EventEmitter {
       this.pending.clear()
       if (this.stopping) return
       this.emit('event', 'core-exit', `The speech engine stopped unexpectedly (code ${code}).`)
-      if (this.restarts++ < 3) setTimeout(() => this.start(), 1000)
+      // Give up only on an engine that keeps dying straight away. One that ran for a while
+      // before stopping gets a fresh set of attempts, so a crash a day never adds up to
+      // an app that has to be restarted by hand.
+      if (Date.now() - this.startedAt > STABLE_AFTER_MS) this.restarts = 0
+      if (this.restarts++ < MAX_QUICK_RESTARTS) setTimeout(() => this.start(), 1000)
     })
+  }
+
+  /** Kills the engine as a crash would, without telling the rest of the app. For the self-check. */
+  crashForTest(): void {
+    this.child?.kill('SIGKILL')
   }
 
   private onLine(line: string): void {

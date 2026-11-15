@@ -22,6 +22,8 @@ mod rpc;
 mod rpc_tests;
 mod settings;
 #[cfg(test)]
+mod stress_tests;
+#[cfg(test)]
 mod test_support;
 mod textproc;
 

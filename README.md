@@ -235,8 +235,16 @@ The two talk over a small JSON protocol, so the core can be reused by other fron
   - **audio tests:** real recordings through real speech models, checking accuracy, very short and very long
     recordings, other sample rates, silence, and writing as you speak. These exist because of 0.4.0, where a
     one-line tuning change made Whisper repeat itself while every other test passed;
-  - a smoke test that builds the real app, starts it, opens every screen, and has it transcribe a recording.
-- **Every release:** all of that on Windows, macOS and Linux for the tagged commit, before any installer is built.
+  - a packaged-app test that builds the real app, starts it, opens every screen, has it transcribe a recording,
+    kills its engine to see it come back, and floods the engine with requests;
+  - stress tests for what goes wrong: requests from many threads at once, malformed requests, the app being
+    killed while it saves, and downloads that are cut off, corrupted or oversized.
+- **Every change that lands, and every release:** the slow stress tests. Hundreds of dictations in a row with
+  memory watched for leaks, switching models back and forth, a ten-minute recording, and audio no microphone
+  should produce.
+- **Every release:** all of that on Windows, macOS and Linux. The installers are built once and the app from
+  that same build is what gets tested, so what is published is what passed. A release can also be rehearsed
+  end to end without publishing anything.
 - **Every week:** an audit of the dependencies against known vulnerabilities.
 
 ## Roadmap
