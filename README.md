@@ -156,7 +156,12 @@ offered through the app's own updater unless you are already running a beta.
 ### Platform notes
 
 - **Installers are not code-signed yet.** Windows SmartScreen will ask you to confirm ("More info" → "Run anyway").
-  On macOS, right-click the app and choose Open the first time.
+- **Opening it on macOS the first time.** macOS says it could not verify the app. Click **Done**, open
+  **System Settings → Privacy & Security**, scroll to the message about Sayso and click **Open Anyway**. You only
+  do this once per version.
+- **"Sayso is damaged and can't be opened" (version 0.4.0 and older).** The app is not damaged; those versions
+  were published without a valid signature. Drag Sayso to Applications, then run this in Terminal and open it
+  again: `xattr -cr /Applications/Sayso.app`
 - **macOS** asks for two permissions: Microphone (to hear you) and Accessibility (to paste into other apps).
 - **Linux** needs an X11 session. Global shortcuts and simulated paste are not available on Wayland yet.
 - **Updates.** Windows and Linux AppImage builds download new versions themselves and offer **Restart to update**.

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Used only when the app is signed ad hoc, that is, without a Developer ID certificate.
+  It is entitlements.mac.plist plus one more entry; keep the two files in step.
+-->
+<plist version="1.0">
+  <dict>
+    <!-- Needed by the JavaScript engine. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <!-- Needed to record from the microphone. -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+    <!--
+      An ad hoc signature carries no team, so the hardened runtime cannot tell that the app's
+      own frameworks belong to it and would refuse to load them. A Developer ID build does
+      not need this.
+    -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+  </dict>
+</plist>
