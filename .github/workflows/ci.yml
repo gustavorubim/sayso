@@ -38,7 +38,7 @@ jobs:
     name: Interface (format, lint, types, tests)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/prepare
         with:
           rust: 'false'
@@ -60,7 +60,7 @@ jobs:
       matrix:
         os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04","windows-latest"]' || '["ubuntu-22.04","windows-latest","macos-latest"]') }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/prepare
         with:
           rust-components: rustfmt, clippy
@@ -90,7 +90,7 @@ jobs:
       SAYSO_TEST_DATA: ${{ github.workspace }}/.speech-models
       SAYSO_TEST_MODELS: canary-180m-flash,whisper-large-v3-turbo
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/prepare
         with:
           rust-cache: debug
@@ -129,7 +129,7 @@ jobs:
       matrix:
         os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04","windows-latest"]' || '["ubuntu-22.04","windows-latest","macos-latest"]') }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/prepare
         with:
           rust-cache: release

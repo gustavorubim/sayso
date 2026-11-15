@@ -42,7 +42,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Tag must match package.json
         run: |
@@ -90,7 +90,7 @@ jobs:
             engine: sherpa-onnx-v2.0.1-linux-x64-static-lib.tar.bz2
             engine_sha256: 55cfadf65ba50d0afc1a802b7a337942819e51c94a5b5a384def1978f7c70871
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # No build cache: what is released is always compiled from scratch.
       - uses: ./.github/actions/prepare
