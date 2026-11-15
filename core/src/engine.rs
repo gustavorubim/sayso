@@ -66,10 +66,12 @@ fn default_threads() -> i32 {
     num_cpus::get_physical().clamp(1, 6) as i32
 }
 
-/// Whisper appends silence to the audio before recognising it. sherpa-onnx's own default
-/// is long; three seconds (300 frames) roughly halves Whisper's time on short dictations
-/// with identical output in our tests. Shorter than about 1.5 s starts to garble the text.
-const WHISPER_TAIL_PADDINGS: i32 = 300;
+/// Whisper appends silence to the audio before recognising it; -1 keeps sherpa-onnx's
+/// own amount. Shortening it is faster but costs accuracy: on 100 hard recordings Whisper
+/// Turbo's word error rate went from 5.5% at the default to 6.2% (800 frames), 6.6% (500)
+/// and 9.0% (300). Version 0.4.0 shipped 300 on the strength of two clips; do not repeat
+/// that without running `sayso-core bench --eval` on a real test set.
+const WHISPER_TAIL_PADDINGS: i32 = -1;
 
 /// Tuning knobs for the recognizer. `Default` is what the app ships with.
 #[derive(Clone, Debug)]
@@ -176,6 +178,31 @@ impl Engine {
                 m.canary.src_lang = Some(language.clone());
                 m.canary.tgt_lang = Some(language.clone());
                 m.canary.use_pnc = true;
+                m.tokens = path(&dir, tokens);
+            }
+            Kind::Qwen3 {
+                conv_frontend,
+                encoder,
+                decoder,
+                tokenizer,
+            } => {
+                m.qwen3_asr.conv_frontend = path(&dir, conv_frontend);
+                m.qwen3_asr.encoder = path(&dir, encoder);
+                m.qwen3_asr.decoder = path(&dir, decoder);
+                m.qwen3_asr.tokenizer = path(&dir, tokenizer);
+                // Room for a full 25-second chunk of fast speech.
+                m.qwen3_asr.max_new_tokens = 256;
+            }
+            Kind::Cohere {
+                encoder,
+                decoder,
+                tokens,
+            } => {
+                m.cohere_transcribe.encoder = path(&dir, encoder);
+                m.cohere_transcribe.decoder = path(&dir, decoder);
+                m.cohere_transcribe.language = Some(language.clone());
+                m.cohere_transcribe.use_punct = true;
+                m.cohere_transcribe.use_itn = true;
                 m.tokens = path(&dir, tokens);
             }
         }

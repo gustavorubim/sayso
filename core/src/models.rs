@@ -48,6 +48,19 @@ pub enum Kind {
         decoder: &'static str,
         tokens: &'static str,
     },
+    /// Qwen3-ASR: an audio encoder feeding a language-model decoder. `tokenizer` is a folder.
+    Qwen3 {
+        conv_frontend: &'static str,
+        encoder: &'static str,
+        decoder: &'static str,
+        tokenizer: &'static str,
+    },
+    /// Cohere Transcribe. The encoder's weights sit in a `.data` file next to it.
+    Cohere {
+        encoder: &'static str,
+        decoder: &'static str,
+        tokens: &'static str,
+    },
 }
 
 pub struct ModelDef {
@@ -81,6 +94,31 @@ const WHISPER_LANGS: &[&str] = &[
 
 pub const CATALOG: &[ModelDef] = &[
     ModelDef {
+        id: "parakeet-tdt-0.6b-ultra",
+        name: "Parakeet Ultra",
+        family: "Parakeet",
+        revision: "402e1190ce85b9793118ee223db21fb0d12f52db",
+        repo: "csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-ultra-int8",
+        source: "moondream/parakeet-ultra",
+        description: "The best all-round choice. Parakeet v3 trained further by Moondream: very fast on a CPU, with automatic punctuation, and more accurate than the original in our tests.",
+        languages: "25 European languages, detected automatically",
+        language_choices: &[],
+        auto_language: true,
+        files: &[
+            ("encoder.int8.onnx", 652_282_345, "b43072e1b721f18a3df03fcfeb763ff7c4debdf29843598a3aba2f703e2780a3"),
+            ("decoder.int8.onnx", 11_845_274, "1fab98fe6c12aded87d2da66272cc9e148d0a0044ce3850a12fe56302ec4a922"),
+            ("joiner.int8.onnx", 6_355_277, "8a71aaccfdba3d451775507a889afd2257d2e754463fd81095a8c8f290f924c2"),
+            ("tokens.txt", 93_939, "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d"),
+        ],
+        kind: Kind::Transducer {
+            encoder: "encoder.int8.onnx",
+            decoder: "decoder.int8.onnx",
+            joiner: "joiner.int8.onnx",
+            tokens: "tokens.txt",
+        },
+        recommended: true,
+    },
+    ModelDef {
         id: "whisper-large-v3-turbo",
         name: "Whisper Large v3 Turbo",
         family: "Whisper",
@@ -110,7 +148,7 @@ pub const CATALOG: &[ModelDef] = &[
         revision: "ed5d745623472f97cfc2e6c2916ee248798fc5a8",
         repo: "csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8",
         source: "nvidia/parakeet-tdt-0.6b-v3",
-        description: "NVIDIA's transducer. Very fast on a CPU with top-tier accuracy, automatic punctuation and capitalization.",
+        description: "NVIDIA's original Parakeet v3. Parakeet Ultra is the same model trained further and made fewer errors in our tests; keep this one if you already have it.",
         languages: "25 European languages, detected automatically",
         language_choices: &[],
         auto_language: true,
@@ -126,7 +164,7 @@ pub const CATALOG: &[ModelDef] = &[
             joiner: "joiner.int8.onnx",
             tokens: "tokens.txt",
         },
-        recommended: true,
+        recommended: false,
     },
     ModelDef {
         id: "distil-whisper-large-v3.5",
@@ -175,13 +213,64 @@ pub const CATALOG: &[ModelDef] = &[
         recommended: false,
     },
     ModelDef {
+        id: "qwen3-asr-0.6b",
+        name: "Qwen3-ASR 0.6B",
+        family: "Qwen",
+        revision: "68818b2313fe77bd06f6a7c5068ff3ef59d02b8a",
+        repo: "csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25",
+        source: "Qwen/Qwen3-ASR-0.6B",
+        description: "Alibaba's speech model built on a language model. Covers the most languages after Whisper and handles mixed-language speech; slower than Parakeet.",
+        languages: "30 languages and 22 Chinese dialects, detected automatically",
+        language_choices: &[],
+        auto_language: true,
+        files: &[
+            ("conv_frontend.onnx", 44_148_281, "d22dc4423e0940e49884e903d2ea2f7e5567c14fc1aed97e4e26d6b8f208ef9e"),
+            ("encoder.int8.onnx", 182_491_662, "60748d3e6744a57c9c91e1b17424a6c2990567e8adceb0783940c03ed98fa9d9"),
+            ("decoder.int8.onnx", 755_914_231, "4f6885be5959ae26af3089d38ee7972c5fafbeeb1cf8d5e76eab6d8b61ca5771"),
+            ("tokenizer/merges.txt", 1_671_853, "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"),
+            ("tokenizer/tokenizer_config.json", 12_487, "4942d005604266809309cabc9f4e9cb89ce855d59b14681fdc0e1cc62ea26c4c"),
+            ("tokenizer/vocab.json", 2_776_833, "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"),
+        ],
+        kind: Kind::Qwen3 {
+            conv_frontend: "conv_frontend.onnx",
+            encoder: "encoder.int8.onnx",
+            decoder: "decoder.int8.onnx",
+            tokenizer: "tokenizer",
+        },
+        recommended: false,
+    },
+    ModelDef {
+        id: "cohere-transcribe",
+        name: "Cohere Transcribe",
+        family: "Cohere",
+        revision: "156a470cf08eefe706a0004f3c52d9ee567ca7a0",
+        repo: "csukuangfj2/sherpa-onnx-cohere-transcribe-14-lang-int8-2026-04-01",
+        source: "CohereLabs/cohere-transcribe-03-2026",
+        description: "The most accurate model here in our tests, about a third fewer errors than the next best. A large download, and it uses several gigabytes of memory.",
+        languages: "14 languages",
+        language_choices: &["en", "fr", "de", "it", "es", "pt", "el", "nl", "pl", "zh", "ja", "ko", "vi", "ar"],
+        auto_language: false,
+        files: &[
+            ("encoder.int8.onnx", 3_090_822, "cf704f8cfa90e3f0a76f9ffc05998bdf00ba9ae983192c14a85a3a5eb008b367"),
+            ("encoder.int8.onnx.data", 2_731_503_072, "bcf1b7148c8518ae52df1ad2d2fc2b4e89261ea23e6c874eef1d9f55bcbaa4a3"),
+            ("decoder.int8.onnx", 153_250_705, "8372ca6c8ff4db8b916ca3592f5c757a715e691b9edec751ba19b29fc854baf9"),
+            ("tokens.txt", 207_437, "013ede043ae2480e3a9205cc34550d9686100cc682bacc90f702facdfbb93035"),
+        ],
+        kind: Kind::Cohere {
+            encoder: "encoder.int8.onnx",
+            decoder: "decoder.int8.onnx",
+            tokens: "tokens.txt",
+        },
+        recommended: false,
+    },
+    ModelDef {
         id: "canary-180m-flash",
         name: "Canary 180M Flash",
         family: "Canary",
         revision: "9077164e0d3dd1d5353743e89ceaa1d3a770838c",
         repo: "csukuangfj/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8",
         source: "nvidia/canary-180m-flash",
-        description: "NVIDIA's compact encoder-decoder. Small download, punctuated output, four languages.",
+        description: "NVIDIA's compact encoder-decoder. The smallest download, and the second most accurate model in our tests. Four languages.",
         languages: "English, Spanish, German, French",
         language_choices: &["en", "es", "de", "fr"],
         auto_language: false,
@@ -357,6 +446,17 @@ mod tests {
                 }
                 Kind::SenseVoice { model, tokens } => vec![model, tokens],
                 Kind::Canary {
+                    encoder,
+                    decoder,
+                    tokens,
+                } => vec![encoder, decoder, tokens],
+                Kind::Qwen3 {
+                    conv_frontend,
+                    encoder,
+                    decoder,
+                    ..
+                } => vec![conv_frontend, encoder, decoder],
+                Kind::Cohere {
                     encoder,
                     decoder,
                     tokens,

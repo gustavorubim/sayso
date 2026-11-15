@@ -23,7 +23,7 @@ While you speak, a small indicator at the bottom of the screen shows your voice 
   apps that block pasting, or just copied.
 - **Write as you speak.** Optionally, each sentence is typed as soon as you pause, while you keep talking, instead of
   everything arriving at the end.
-- **Choose your model.** Seven speech models in a dropdown; picking one downloads it from Hugging Face with progress,
+- **Choose your model.** Ten speech models in a dropdown; picking one downloads it from Hugging Face with progress,
   cancel and resume. Switch whenever you like.
 - **Rewrite shortcut.** An optional second shortcut that dictates and then has a language model tidy the result —
   typos, false starts, clumsy phrasing — using your own [OpenRouter](https://openrouter.ai) key and any model there.
@@ -46,11 +46,14 @@ While you speak, a small indicator at the bottom of the screen shows your voice 
 
 | Model | Languages | Download | Good for |
 | --- | --- | --- | --- |
-| [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) | 25 European languages | 671 MB | Best all-round choice on a CPU |
+| [Parakeet Ultra](https://huggingface.co/moondream/parakeet-ultra) | 25 European languages | 672 MB | Best all-round choice: fast and accurate |
+| [Cohere Transcribe](https://huggingface.co/CohereLabs/cohere-transcribe-03-2026) | 14 languages | 2.9 GB | Highest accuracy |
+| [Qwen3-ASR 0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B) | 30 languages and 22 Chinese dialects | 989 MB | Wide language coverage, mixed-language speech |
+| [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) | 25 European languages | 671 MB | The original that Ultra is built on |
 | [Whisper Large v3 Turbo](https://huggingface.co/openai/whisper-large-v3-turbo) | About 100 | 1.04 GB | Widest language coverage |
 | [Distil-Whisper Large v3.5](https://huggingface.co/distil-whisper/distil-large-v3.5) | English | 984 MB | Whisper-level English, faster |
 | [Whisper Small](https://huggingface.co/openai/whisper-small) | About 100 | 375 MB | Older or low-memory machines |
-| [Canary 180M Flash](https://huggingface.co/nvidia/canary-180m-flash) | English, Spanish, German, French | 207 MB | Small download, punctuated output |
+| [Canary 180M Flash](https://huggingface.co/nvidia/canary-180m-flash) | English, Spanish, German, French | 207 MB | Smallest download, second most accurate |
 | [SenseVoice Small](https://huggingface.co/FunAudioLLM/SenseVoiceSmall) | Chinese, Cantonese, English, Japanese, Korean | 240 MB | East Asian languages, very fast |
 | [Moonshine Base](https://huggingface.co/UsefulSensors/moonshine-base) | English | 287 MB | Near-instant short phrases |
 
@@ -61,30 +64,41 @@ model has its own license; check its model card before commercial use.
 
 ## Performance
 
-Measured on a 16-core desktop CPU (Intel i7-13700F), no GPU involved, with the models' 8-bit versions:
+Every model was scored on the same 300 recordings of deliberately difficult English speech (42 minutes, 7,019
+words, from LibriSpeech test-other), on a 16-core desktop CPU (Intel i7-13700F) with no GPU involved.
 
-| Model | 3-second dictation | 7-second dictation |
-| --- | --- | --- |
-| Parakeet TDT 0.6B v3 | about 0.17 s | about 0.4 s |
-| Whisper Small | about 0.45 s | about 1.0 s |
-| Whisper Large v3 Turbo | about 0.55 s | about 1.1 s |
+| Model | Word error rate | Speed | A 7-second dictation takes |
+| --- | --- | --- | --- |
+| Cohere Transcribe | 3.1% | 9× real time | about 0.75 s |
+| Canary 180M Flash | 4.0% | 15× | about 0.5 s |
+| Parakeet Ultra | 4.5% | 22× | about 0.3 s |
+| Parakeet TDT 0.6B v3 | 4.9% | 22× | about 0.3 s |
+| Whisper Large v3 Turbo | 4.9% | 5× | about 1.5 s |
+| Qwen3-ASR 0.6B | 5.4% | 6× | about 1.1 s |
+| SenseVoice Small | 7.4% | 57× | about 0.1 s |
+| Whisper Small | 7.5% | 5× | about 1.5 s |
+| Moonshine Base | 7.7% | 38× | about 0.2 s |
 
-Those were taken with a flight simulator running on the same machine. Three things keep the numbers there:
+Word error rate is the share of words a model got wrong; lower is better. Models within about half a point of
+each other are not reliably different on a set this size, and the set is English audiobook speech, so it says
+nothing about other languages, where Whisper, Qwen3-ASR and SenseVoice have the widest reach.
 
-- **Priority.** The speech engine is a background process, and Windows slows those down when something else is
-  busy. Sayso opts out. With a game running, a 7-second clip went from about 1.15 s to 0.45 s.
+Two settings matter for speed:
+
+- **Priority.** The speech engine is a background process, and Windows slows those down. Sayso opts out. On the
+  same machine, Parakeet went from 5× to 24× real time with that one change.
 - **Threads.** Up to six, never more than the machine's physical cores. More than eight made every model slower.
-- **Whisper padding.** Whisper appends silence before recognising; three seconds instead of the engine's longer
-  default roughly halves its time on short dictations, with the same text.
 
-Model choice matters more than any setting: Parakeet, Canary and SenseVoice are several times faster than Whisper
-on the same audio. GPU acceleration was tested and gave no gain with these models, so Sayso runs on the CPU.
+GPU acceleration was tested and gave no gain with these models, so Sayso runs on the CPU.
 
 To measure your own machine, build from source and run:
 
 ```bash
 core/target/release/sayso-core bench --data-dir <your Sayso data folder> --wav speech.wav
 ```
+
+Add `--eval <folder>` to score accuracy on your own recordings: the folder holds pairs of files, `name.wav` and
+`name.txt` with the correct words.
 
 ## Rewrite with a language model
 
@@ -216,7 +230,7 @@ The two talk over a small JSON protocol, so the core can be reused by other fron
 
 ## Roadmap
 
-Shipped so far: dictation at the cursor, seven downloadable models, writing as you speak, the rewrite shortcut,
+Shipped so far: dictation at the cursor, ten downloadable models, writing as you speak, the rewrite shortcut,
 computer-audio transcription, in-app update notices, and the performance and security work described above.
 
 Next, roughly in order:

@@ -3,6 +3,26 @@
 Notable changes to Sayso. The format follows [Keep a Changelog](https://keepachangelog.com), and versions
 follow [Semantic Versioning](https://semver.org).
 
+## 0.4.2
+
+### Fixed
+
+- Whisper models are accurate again. Version 0.4.0 shortened the silence Whisper appends to audio; measured
+  on a real test set, that raised Whisper Large v3 Turbo's word error rate from 4.9% to 8.6%. The engine's own
+  setting is restored. Whisper is somewhat slower than in 0.4.0 as a result
+
+### Added
+
+- Three speech models: **Parakeet Ultra** (now the recommended model), **Cohere Transcribe** (the most accurate
+  in our tests) and **Qwen3-ASR 0.6B** (30 languages and 22 Chinese dialects)
+- `sayso-core bench --eval <folder>` scores every installed model for word error rate and speed on a folder of
+  recordings with known transcripts
+
+### Changed
+
+- The benchmark mode now runs the way the app does, with the system asked not to throttle it; pass
+  `--background` to measure an ordinary background process
+
 ## 0.4.1
 
 ### Fixed
