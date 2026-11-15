@@ -128,6 +128,11 @@ dependency that ships in the app has a known vulnerability, it opens an issue la
 Versions follow [Semantic Versioning](https://semver.org). Signing is optional and switched on by adding the
 `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` repository secrets.
 
+Without those secrets the macOS app is signed ad hoc (`scripts/package.mjs`). An ad hoc signature needs no
+certificate and is enough for macOS to open the app once the person allows it under Privacy & Security; with no
+signature at all macOS calls the app "damaged" and refuses. Always package through `npm run dist` or
+`scripts/package.mjs` rather than calling `electron-builder` directly, which skips this step.
+
 ## Conduct and security
 
 Be kind; see the [Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities privately as described in

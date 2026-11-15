@@ -124,7 +124,8 @@ jobs:
 
       # Only the packaging step sees the token and the optional signing secrets. A secret
       # that is not set arrives as an empty string, and an empty CSC_LINK makes
-      # electron-builder fail, so drop the empty ones first.
+      # electron-builder fail, so drop the empty ones first. Without the signing secrets the
+      # macOS app is signed ad hoc; see scripts/package.mjs.
       - name: Package and upload installers
         shell: bash
         env:
@@ -140,4 +141,4 @@ jobs:
               unset "$name"
             fi
           done
-          npx electron-builder --publish always
+          node scripts/package.mjs --publish always

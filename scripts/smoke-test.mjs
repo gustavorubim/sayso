@@ -1,6 +1,6 @@
 // Starts the packaged app in self-check mode and reports what it found.
 //
-//   npm run core:release && npm run build && npx electron-builder --dir --publish never
+//   npm run core:release && npm run build && node scripts/package.mjs --dir --publish never
 //   node scripts/smoke-test.mjs
 //
 // The checks themselves live in src/main/smoke.ts. This script finds the unpacked app that
@@ -37,7 +37,7 @@ function findApp() {
 
 const exe = findApp()
 if (!exe) {
-  console.error('No unpacked app found in dist/. Build it first: npx electron-builder --dir --publish never')
+  console.error('No unpacked app found in dist/. Build it first: node scripts/package.mjs --dir --publish never')
   process.exit(2)
 }
 
