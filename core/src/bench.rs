@@ -126,7 +126,7 @@ fn word_diff(reference: &str, other: &str) -> f64 {
 
 /// Word errors (substitutions, insertions, deletions) in `other`, and the number of words in
 /// `reference`. Case and punctuation are ignored.
-fn word_errors(reference: &str, other: &str) -> (usize, usize) {
+pub(crate) fn word_errors(reference: &str, other: &str) -> (usize, usize) {
     let norm = |s: &str| -> Vec<String> {
         s.to_lowercase()
             .split_whitespace()
@@ -577,5 +577,53 @@ pub fn trim_silence(samples: &[f32], vad_model: &Path) -> Vec<f32> {
         samples.to_vec()
     } else {
         speech
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn word_errors_counts_substitutions_insertions_and_deletions() {
+        assert_eq!(word_errors("the cat sat", "the cat sat"), (0, 3));
+        assert_eq!(word_errors("the cat sat", "the dog sat"), (1, 3));
+        assert_eq!(word_errors("the cat sat", "the cat"), (1, 3));
+        assert_eq!(word_errors("the cat sat", "the big cat sat"), (1, 3));
+        assert_eq!(word_errors("the cat sat", ""), (3, 3));
+    }
+
+    #[test]
+    fn word_errors_ignores_case_and_punctuation_but_not_apostrophes() {
+        assert_eq!(word_errors("hello world", "Hello, World!"), (0, 2));
+        assert_eq!(word_errors("don't stop", "Don't stop."), (0, 2));
+        assert_eq!(word_errors("dont stop", "don't stop"), (1, 2));
+    }
+
+    #[test]
+    fn word_errors_with_an_empty_reference() {
+        assert_eq!(word_errors("", ""), (0, 0));
+        assert_eq!(word_errors("", "two words"), (2, 0));
+        assert_eq!(word_diff("", ""), 0.0);
+        assert_eq!(word_diff("", "anything"), 1.0);
+    }
+
+    #[test]
+    fn a_repeated_phrase_counts_as_errors() {
+        // The 0.4.0 Whisper regression: the phrase written, then started again.
+        let (errors, words) = word_errors("this is a test", "This is a test. This is a test");
+        assert_eq!((errors, words), (4, 4));
+    }
+
+    #[test]
+    fn median_and_best_time() {
+        assert_eq!(median(vec![5.0, 1.0, 3.0]), 3.0);
+        let mut calls = 0;
+        let (best, last) = time(4, || {
+            calls += 1;
+            calls
+        });
+        assert_eq!(last, 4);
+        assert!(best >= 0.0);
     }
 }

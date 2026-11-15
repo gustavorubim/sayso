@@ -8,7 +8,7 @@ editors: any app.
 Speech recognition runs entirely on your computer with open models you choose and download from
 [Hugging Face](https://huggingface.co). No account, no subscription, and your audio never leaves the machine.
 
-Runs on Windows, macOS and Linux.
+Runs on Windows, macOS (Apple silicon) and Linux.
 
 ![The main window while dictating: the shortcut keys light up and the app is listening](docs/images/listening.png)
 
@@ -155,8 +155,7 @@ Download the installer for your system from the
 | System | File |
 | --- | --- |
 | Windows | `Sayso-…-windows-x64-setup.exe` |
-| macOS, Apple silicon | `Sayso-…-mac-arm64.dmg` |
-| macOS, Intel | `Sayso-…-mac-x64.dmg` |
+| macOS (Apple silicon) | `Sayso-…-mac-arm64.dmg` |
 | Linux | `Sayso-…-linux-x86_64.AppImage` or `Sayso-…-linux-amd64.deb` |
 
 Then open the app, pick a model under **Speech models**, and hold the shortcut (`Ctrl+Shift+Space` on Windows and
@@ -230,8 +229,13 @@ The two talk over a small JSON protocol, so the core can be reused by other fron
 
 ### How changes are checked
 
-- **Every pull request:** formatting, lint and unit tests for both halves, plus a smoke test that builds the real
-  app, starts it, and has it check itself — the engine runs, every screen opens, the icons are in the package.
+- **Every pull request:**
+  - formatting, lint and unit tests for both halves: the engine's protocol, settings, model catalog and text
+    handling, and every screen of the interface against a simulated engine;
+  - **audio tests:** real recordings through real speech models, checking accuracy, very short and very long
+    recordings, other sample rates, silence, and writing as you speak. These exist because of 0.4.0, where a
+    one-line tuning change made Whisper repeat itself while every other test passed;
+  - a smoke test that builds the real app, starts it, opens every screen, and has it transcribe a recording.
 - **Every release:** all of that on Windows, macOS and Linux for the tagged commit, before any installer is built.
 - **Every week:** an audit of the dependencies against known vulnerabilities.
 

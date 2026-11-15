@@ -21,8 +21,19 @@ fn write_line(v: &Value) {
     let _ = lock.flush();
 }
 
+static QUIET: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Stops events being written to stdout. For command-line use and tests, where nothing is
+/// listening and the lines would only be noise.
+pub fn set_quiet(quiet: bool) {
+    QUIET.store(quiet, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Send an event to the shell.
 pub fn emit(event: &str, payload: impl Serialize) {
+    if QUIET.load(std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
     write_line(&json!({ "event": event, "payload": payload }));
 }
 
@@ -66,7 +77,7 @@ fn to_value(v: impl Serialize) -> Result<Value, String> {
     serde_json::to_value(v).map_err(|e| e.to_string())
 }
 
-fn dispatch(app: &Arc<App>, method: &str, params: Value) -> Result<Value, String> {
+pub(crate) fn dispatch(app: &Arc<App>, method: &str, params: Value) -> Result<Value, String> {
     match method {
         "get_settings" => to_value(app.settings.lock().unwrap().clone()),
         "save_settings" => {

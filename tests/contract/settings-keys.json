@@ -1,0 +1,23 @@
+[
+  "capture_enabled",
+  "capture_shortcut",
+  "input_device",
+  "language",
+  "launch_at_login",
+  "mode",
+  "model_id",
+  "output",
+  "remove_fillers",
+  "replacements",
+  "restore_clipboard",
+  "rewrite_enabled",
+  "rewrite_model",
+  "rewrite_prompt",
+  "rewrite_shortcut",
+  "save_history",
+  "shortcut",
+  "show_overlay",
+  "timing",
+  "trailing_space",
+  "voice_commands"
+]

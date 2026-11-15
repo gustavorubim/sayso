@@ -6,6 +6,8 @@
 
 mod app;
 mod audio;
+#[cfg(test)]
+mod audio_tests;
 mod bench;
 mod download;
 mod engine;
@@ -16,15 +18,21 @@ mod paste;
 mod perf;
 mod rewrite;
 mod rpc;
+#[cfg(test)]
+mod rpc_tests;
 mod settings;
+#[cfg(test)]
+mod test_support;
 mod textproc;
 
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc};
 
 fn main() {
-    if std::env::args().nth(1).as_deref() == Some("bench") {
-        std::process::exit(bench::run());
+    match std::env::args().nth(1).as_deref() {
+        Some("bench") => std::process::exit(bench::run()),
+        Some("fetch") => std::process::exit(download::fetch_command()),
+        _ => {}
     }
 
     // If a worker thread panics, state may be half-updated and locks poisoned. Exit so the
