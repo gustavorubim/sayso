@@ -32,7 +32,7 @@ jobs:
     name: Checks
     uses: ./.github/workflows/ci.yml
     with:
-      packaged-app: false
+      skip-packaged-app: true
 
   draft:
     name: Create draft release
