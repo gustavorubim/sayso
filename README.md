@@ -173,9 +173,16 @@ offered through the app's own updater unless you are already running a beta.
 - **Opening it on macOS the first time.** macOS says it could not verify the app. Click **Done**, open
   **System Settings → Privacy & Security**, scroll to the message about Sayso and click **Open Anyway**. You only
   do this once per version.
-- **"Sayso is damaged and can't be opened" (version 0.4.0 and older).** The app is not damaged; those versions
-  were published without a valid signature. Drag Sayso to Applications, then run this in Terminal and open it
-  again: `xattr -cr /Applications/Sayso.app`
+- **If macOS says "Sayso is damaged and can't be opened".** The app is not damaged. macOS marks everything a
+  browser downloads, and it refuses marked apps that Apple has not notarized; Sayso is not notarized yet. Drag
+  Sayso to Applications, then run this in Terminal and open it again:
+
+  ```bash
+  xattr -cr /Applications/Sayso.app
+  ```
+
+  That removes the download mark from Sayso only. Versions 0.4.0 and older always need it, because they were
+  published without a valid signature. Newer versions are signed, but some Macs still show this message.
 - **macOS** asks for two permissions: Microphone (to hear you) and Accessibility (to paste into other apps).
 - **Linux** needs an X11 session. Global shortcuts and simulated paste are not available on Wayland yet.
 - **Updates.** Windows and Linux AppImage builds download new versions themselves and offer **Restart to update**.

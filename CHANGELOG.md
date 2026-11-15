@@ -11,6 +11,11 @@ follow [Semantic Versioning](https://semver.org).
   on a real test set, that raised Whisper Large v3 Turbo's word error rate from 4.9% to 8.6%. The engine's own
   setting is restored. Whisper is somewhat slower than in 0.4.0 as a result
 
+### Changed
+
+- The README explains how to open Sayso on a Mac that reports it as damaged; the real fix, notarization by
+  Apple, needs a Developer ID certificate
+
 ### Added
 
 - Three speech models: **Parakeet Ultra** (now the recommended model), **Cohere Transcribe** (the most accurate
