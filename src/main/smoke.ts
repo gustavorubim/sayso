@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { type BrowserWindow, app, nativeImage } from 'electron'
 import type { ModelInfo, Settings } from '../shared/types'
 import type { Core } from './core'
@@ -82,6 +82,29 @@ export async function runSmokeTest({ core, mainWindow, overlay, iconPaths }: Con
         )
     ],
     [
+      'the packaged engine transcribes a recording',
+      async () => {
+        // Needs a downloaded model, so it only runs when the script provides one.
+        const wav = process.env['SAYSO_SMOKE_AUDIO']
+        const modelId = process.env['SAYSO_SMOKE_MODEL']
+        if (!wav || !modelId) return 'skipped: no speech model was provided'
+        if (!existsSync(wav)) return `recording not found: ${wav}`
+        const settings = await core.call<Settings>('get_settings')
+        await core.call('save_settings', { ...settings, model_id: modelId, language: 'en' })
+        const transcript = await core.call<string>('transcribe_file', { path: wav })
+        const normalise = (text: string): string[] =>
+          text
+            .toLowerCase()
+            .replace(/[^a-z0-9' ]+/g, ' ')
+            .split(/\s+/)
+            .filter(Boolean)
+        const expected = normalise(readFileSync(wav.replace(/\.wav$/, '.txt'), 'utf8'))
+        const got = new Set(normalise(transcript))
+        const found = expected.filter((word) => got.has(word)).length
+        return found >= expected.length * 0.8 || `expected "${expected.join(' ')}", got "${transcript.trim()}"`
+      }
+    ],
+    [
       'the interface cannot start a recording',
       () => waitFor(mainWindow, "window.stt.call('toggle_recording').then(() => false, () => true)", 5_000)
     ]
@@ -91,7 +114,10 @@ export async function runSmokeTest({ core, mainWindow, overlay, iconPaths }: Con
   for (const [name, run] of checks) {
     try {
       const outcome = await run()
-      results.push(outcome === true ? { name, ok: true } : { name, ok: false, detail: String(outcome) })
+      if (outcome === true) results.push({ name, ok: true })
+      else if (typeof outcome === 'string' && outcome.startsWith('skipped')) {
+        results.push({ name, ok: true, detail: outcome })
+      } else results.push({ name, ok: false, detail: String(outcome) })
     } catch (err) {
       results.push({ name, ok: false, detail: err instanceof Error ? err.message : String(err) })
     }

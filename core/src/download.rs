@@ -60,6 +60,54 @@ pub fn start(app: Arc<App>, id: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// `sayso-core fetch --data-dir <dir> <model id>...`: downloads models from the command
+/// line, with the same pinned revisions and checksums as the app. Used to prepare the audio
+/// regression tests; returns the process exit code.
+pub fn fetch_command() -> i32 {
+    let mut data_dir = None;
+    let mut ids = Vec::new();
+    let mut args = std::env::args().skip(2);
+    while let Some(a) = args.next() {
+        if a == "--data-dir" {
+            data_dir = args.next().map(std::path::PathBuf::from);
+        } else {
+            ids.push(a);
+        }
+    }
+    let Some(data_dir) = data_dir else {
+        eprintln!("usage: sayso-core fetch --data-dir <dir> <model id>...");
+        return 2;
+    };
+    if ids.is_empty() {
+        eprintln!(
+            "name at least one model: {}",
+            models::CATALOG.iter().map(|m| m.id).collect::<Vec<_>>().join(", ")
+        );
+        return 2;
+    }
+    rpc::set_quiet(true);
+    let (tx, _rx) = std::sync::mpsc::channel();
+    let app = App::new(data_dir, tx);
+    for id in &ids {
+        let Some(model) = models::find(id) else {
+            eprintln!("unknown model: {id}");
+            return 2;
+        };
+        if model.is_installed(&app.models_dir()) && models::vad_path(&app.models_dir()).is_file() {
+            println!("{id}: already downloaded");
+            continue;
+        }
+        println!("{id}: downloading {} MB", model.size_bytes() / 1_000_000);
+        let total = model.size_bytes() + models::VAD_SIZE;
+        if let Err(e) = download_model(&app, model, total, &AtomicBool::new(false)) {
+            eprintln!("{id}: {e}");
+            return 1;
+        }
+        println!("{id}: done, checksums verified");
+    }
+    0
+}
+
 fn download_model(app: &App, model: &ModelDef, total: u64, cancel: &AtomicBool) -> Result<(), String> {
     let dir = model.dir(&app.models_dir());
     fs::create_dir_all(&dir).map_err(|e| format!("Could not create the model folder: {e}"))?;

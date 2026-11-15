@@ -23,7 +23,6 @@ body:
       options:
         - Windows
         - macOS (Apple silicon)
-        - macOS (Intel)
         - Linux (X11)
         - Linux (Wayland)
     validations:

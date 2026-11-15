@@ -11,5 +11,6 @@
 - [ ] The PR title is a Conventional Commit (`feat: …`, `fix: …`, `docs: …`)
 - [ ] `npm run check` passes (format, lint, types, interface tests)
 - [ ] `npm run core:test`, `cargo fmt` and `cargo clippy -- -D warnings` are clean in `core/`
+- [ ] Changes to recognition, audio handling or model settings: `npm run core:test:audio` passes
 - [ ] User-facing changes are noted under "Unreleased" in `CHANGELOG.md`
 - [ ] New settings, models or protocol methods are documented
