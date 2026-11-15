@@ -109,7 +109,7 @@ Maintainers cut releases; the pipeline does the building.
 3. Open a pull request titled `chore: release 0.2.0` and merge it.
 4. Tag the merge commit: `git tag v0.2.0 && git push origin v0.2.0`.
 5. The **Release** workflow first runs the whole CI suite on the tagged commit, including the smoke test on all
-   three systems. Only if that passes does it build installers for Windows, macOS (Apple silicon and Intel) and Linux and attaches them
+   three systems. Only if that passes does it build installers for Windows, macOS (Apple silicon) and Linux and attaches them
    to a draft release with generated notes.
 6. Try an installer, edit the notes if needed, and publish the draft.
 

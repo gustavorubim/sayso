@@ -3,6 +3,13 @@
 Notable changes to Sayso. The format follows [Keep a Changelog](https://keepachangelog.com), and versions
 follow [Semantic Versioning](https://semver.org).
 
+## Unreleased
+
+### Removed
+
+- The Intel Mac build. macOS releases are for Apple silicon only from now on; 0.4.2 is the last version with
+  an Intel installer
+
 ## 0.4.2
 
 ### Fixed

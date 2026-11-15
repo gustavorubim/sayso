@@ -135,4 +135,61 @@ mod tests {
     fn counts_words() {
         assert_eq!(word_count("one two\nthree "), 3);
     }
+
+    #[test]
+    fn everything_together_in_a_fixed_order() {
+        let s = Settings {
+            remove_fillers: true,
+            voice_commands: true,
+            trailing_space: true,
+            replacements: vec![Replacement { from: "acme".into(), to: "ACME Corp".into() }],
+            ..Settings::default()
+        };
+        assert_eq!(
+            process("  Um, tell acme we agree. New paragraph. Uh, send it today.  ", &s),
+            "tell ACME Corp we agree\n\nsend it today. "
+        );
+    }
+
+    #[test]
+    fn a_trailing_space_is_not_added_after_a_line_break() {
+        let s = Settings { voice_commands: true, trailing_space: true, ..base() };
+        assert_eq!(process("first line new line", &s), "first line");
+        assert_eq!(process("done. New paragraph.", &s), "done");
+    }
+
+    #[test]
+    fn replacements_handle_punctuation_and_other_scripts() {
+        let s = Settings {
+            replacements: vec![
+                Replacement { from: "c plus plus".into(), to: "C++".into() },
+                Replacement { from: "são paulo".into(), to: "São Paulo".into() },
+                Replacement { from: "  ".into(), to: "ignored".into() },
+                Replacement { from: "bye".into(), to: String::new() },
+            ],
+            ..base()
+        };
+        assert_eq!(process("I write C Plus Plus in são paulo, bye", &s), "I write C++ in São Paulo,");
+    }
+
+    #[test]
+    fn text_without_anything_to_change_is_left_alone() {
+        let s = base();
+        for text in ["Hello, world.", "Ünïcödé stays.", "数字 123", "tabs\tand  spaces"] {
+            let out = process(text, &s);
+            assert_eq!(out, text.replace("\t", " ").replace("  ", " "));
+        }
+    }
+
+    #[test]
+    fn voice_commands_can_be_switched_off() {
+        let s = base();
+        assert_eq!(process("add a new line here", &s), "add a new line here");
+    }
+
+    #[test]
+    fn spaces_and_tabs_are_collapsed_but_line_breaks_survive() {
+        let s = Settings { voice_commands: true, ..base() };
+        assert_eq!(process("one   two\t\tthree new line four", &s), "one two three\nfour");
+    }
 }

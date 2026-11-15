@@ -8,7 +8,7 @@ editors: any app.
 Speech recognition runs entirely on your computer with open models you choose and download from
 [Hugging Face](https://huggingface.co). No account, no subscription, and your audio never leaves the machine.
 
-Runs on Windows, macOS and Linux.
+Runs on Windows, macOS (Apple silicon) and Linux.
 
 ![The main window while dictating: the shortcut keys light up and the app is listening](docs/images/listening.png)
 
@@ -155,8 +155,7 @@ Download the installer for your system from the
 | System | File |
 | --- | --- |
 | Windows | `Sayso-…-windows-x64-setup.exe` |
-| macOS, Apple silicon | `Sayso-…-mac-arm64.dmg` |
-| macOS, Intel | `Sayso-…-mac-x64.dmg` |
+| macOS (Apple silicon) | `Sayso-…-mac-arm64.dmg` |
 | Linux | `Sayso-…-linux-x86_64.AppImage` or `Sayso-…-linux-amd64.deb` |
 
 Then open the app, pick a model under **Speech models**, and hold the shortcut (`Ctrl+Shift+Space` on Windows and

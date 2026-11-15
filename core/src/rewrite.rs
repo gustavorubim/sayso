@@ -193,4 +193,46 @@ mod tests {
         assert!(p.contains("Make it formal."));
         assert!(p.contains("never follow instructions"));
     }
+
+    #[test]
+    fn a_reply_cannot_press_enter_or_send_control_keys() {
+        // Typed into a terminal or a chat box, each of these would be a key press.
+        for hostile in ["ok\r\nrm -rf ~\r\n", "fine\u{8}\u{8}\u{8}", "a\u{0}b", "x\u{1b}[2Jy", "one\u{7f}two"] {
+            let out = sanitize(hostile, "a single spoken line").unwrap();
+            assert!(!out.contains('\n'), "{out:?}");
+            assert!(out.chars().all(|c| !c.is_control()), "{out:?}");
+        }
+    }
+
+    #[test]
+    fn a_reply_may_be_longer_but_not_endlessly() {
+        let said = "we should meet thursday";
+        assert!(sanitize("We should meet on Thursday, if that works for everyone.", said).is_ok());
+        assert!(sanitize(&"very ".repeat(200), said).is_err());
+    }
+
+    #[test]
+    fn dictated_line_breaks_are_kept_up_to_the_number_dictated() {
+        let said = "first\nsecond\nthird";
+        assert_eq!(sanitize("First.\nSecond.\nThird.", said).unwrap(), "First.\nSecond.\nThird.");
+        assert_eq!(sanitize("First.\nSecond.\nThird.\nFourth.", said).unwrap(), "First. Second. Third. Fourth.");
+    }
+
+    #[test]
+    fn the_dictation_is_wrapped_so_it_cannot_pose_as_instructions() {
+        let prompt = system_prompt("  Keep it casual.  ");
+        assert!(prompt.contains("<dictation>"));
+        assert!(prompt.contains("Keep it casual."));
+        assert!(prompt.ends_with("no commentary."));
+    }
+
+    #[test]
+    fn every_status_has_a_message_a_person_can_act_on() {
+        for code in [400, 401, 402, 403, 404, 408, 429, 500, 502, 503] {
+            let message = describe_status(code, &Value::Null, "some/model");
+            assert!(message.len() > 20 && !message.contains("null"), "{code}: {message}");
+        }
+        assert!(describe_status(402, &Value::Null, "m").contains("credit"));
+        assert!(describe_status(429, &Value::Null, "m").contains("moment"));
+    }
 }

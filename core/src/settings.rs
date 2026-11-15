@@ -124,4 +124,79 @@ mod tests {
         assert_eq!(s.output, "paste");
         assert!(s.restore_clipboard);
     }
+
+    #[test]
+    fn unknown_fields_from_a_newer_version_are_ignored() {
+        let s: Settings = serde_json::from_str(r#"{"mode":"toggle","a_setting_from_the_future":true}"#).unwrap();
+        assert_eq!(s.mode, "toggle");
+    }
+
+    #[test]
+    fn a_missing_or_corrupt_file_gives_defaults() {
+        let dir = crate::test_support::temp_dir("settings");
+        assert_eq!(Settings::load(&dir.join("absent.json")), Settings::default());
+        std::fs::write(dir.join("broken.json"), "{ not json").unwrap();
+        assert_eq!(Settings::load(&dir.join("broken.json")), Settings::default());
+    }
+
+    #[test]
+    fn save_then_load_keeps_everything() {
+        let dir = crate::test_support::temp_dir("settings");
+        let s = Settings {
+            shortcut: "Ctrl+Alt+KeyD".into(),
+            model_id: Some("whisper-small".into()),
+            language: "pt".into(),
+            input_device: Some("Microphone (USB)".into()),
+            replacements: vec![Replacement { from: "línea".into(), to: "line \"one\"\n".into() }],
+            rewrite_prompt: "Keep it short.".into(),
+            capture_enabled: true,
+            ..Settings::default()
+        };
+        s.save(&dir.join("settings.json")).unwrap();
+        assert_eq!(Settings::load(&dir.join("settings.json")), s);
+    }
+
+    #[test]
+    fn shortcut_slots_follow_the_feature_switches() {
+        let mut s = Settings::default();
+        assert_eq!(s.shortcuts(), [Some(s.shortcut.clone()), None, None]);
+        s.rewrite_enabled = true;
+        s.capture_enabled = true;
+        assert_eq!(
+            s.shortcuts(),
+            [Some(s.shortcut.clone()), Some(s.rewrite_shortcut.clone()), Some(s.capture_shortcut.clone())]
+        );
+    }
+
+    #[test]
+    fn default_shortcuts_are_usable_and_distinct() {
+        let s = Settings::default();
+        let ids: Vec<u32> = [&s.shortcut, &s.rewrite_shortcut, &s.capture_shortcut]
+            .iter()
+            .map(|k| crate::hotkey::parse(k).unwrap_or_else(|e| panic!("{e}")).id())
+            .collect();
+        assert!(ids[0] != ids[1] && ids[1] != ids[2] && ids[0] != ids[2]);
+    }
+
+    #[test]
+    fn optional_features_are_off_until_asked_for() {
+        let s = Settings::default();
+        assert!(!s.rewrite_enabled, "nothing is sent to a network service by default");
+        assert!(!s.capture_enabled);
+        assert!(!s.launch_at_login);
+        assert_eq!(s.model_id, None);
+    }
+
+    /// The interface has its own copy of this list (src/shared/types.ts). Both are checked
+    /// against the same file, so adding a setting on one side only fails a test.
+    #[test]
+    fn settings_fields_match_the_shared_contract() {
+        let contract = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/contract/settings-keys.json");
+        let expected: Vec<String> =
+            serde_json::from_str(&std::fs::read_to_string(&contract).expect("tests/contract/settings-keys.json")).unwrap();
+        let value = serde_json::to_value(Settings::default()).unwrap();
+        let mut actual: Vec<String> = value.as_object().unwrap().keys().cloned().collect();
+        actual.sort();
+        assert_eq!(actual, expected, "update tests/contract/settings-keys.json and src/shared/types.ts together");
+    }
 }

@@ -280,4 +280,41 @@ mod tests {
         assert_eq!(out.len(), 1600);
         assert_eq!(out[10], 20.0);
     }
+
+    #[test]
+    fn resampling_keeps_the_duration() {
+        let one_second: Vec<f32> = (0..48_000).map(|i| (i as f32 * 0.05).sin() * 0.5).collect();
+        for (from, to) in [(48_000, 16_000), (44_100, 16_000), (8_000, 16_000), (22_050, 16_000)] {
+            let input = &one_second[..from as usize];
+            let out = linear_resample(input, from, to);
+            let expected = to as f64;
+            assert!((out.len() as f64 - expected).abs() <= 2.0, "{from}->{to}: {} samples", out.len());
+            assert!(peak(&out) <= 0.5 + 1e-3, "resampling must not make the signal louder");
+        }
+    }
+
+    #[test]
+    fn resampling_keeps_the_pitch() {
+        // A 440 Hz tone at 48 kHz must still be 440 Hz at 16 kHz: count the upward zero crossings.
+        let tone: Vec<f32> = (0..48_000).map(|i| (2.0 * std::f32::consts::PI * 440.0 * i as f32 / 48_000.0).sin()).collect();
+        for out in [linear_resample(&tone, 48_000, 16_000), resample(&tone, 48_000)] {
+            let crossings = out.windows(2).filter(|w| w[0] <= 0.0 && w[1] > 0.0).count();
+            assert!((438..=442).contains(&crossings), "expected about 440 cycles, counted {crossings}");
+        }
+    }
+
+    #[test]
+    fn audio_already_at_16_khz_is_untouched() {
+        let samples = vec![0.1, -0.2, 0.3];
+        assert_eq!(resample(&samples, SAMPLE_RATE), samples);
+        assert_eq!(linear_resample(&samples, 16_000, 16_000), samples);
+        assert!(resample(&[], 48_000).is_empty());
+    }
+
+    #[test]
+    fn level_of_silence_and_of_full_scale() {
+        assert_eq!(rms(&[0.0; 100]), 0.0);
+        assert_eq!(peak(&[]), 0.0);
+        assert!((rms(&[1.0, -1.0, 1.0, -1.0]) - 1.0).abs() < 1e-6);
+    }
 }
