@@ -9,6 +9,18 @@ follow [Semantic Versioning](https://semver.org).
 
 - A "Check for updates" button in the sidebar, under the version number
 
+### Fixed
+
+- Ending a dictation with "new line" or "new paragraph" now leaves the line break; it used to be dropped and
+  replaced by a space
+
+### Changed
+
+- A much larger test suite guards every release: audio regression tests that run real recordings through real
+  speech models, tests for the engine's protocol and state, tests for every screen of the interface, and a
+  packaged-app check that transcribes a recording
+- `sayso-core fetch` downloads models from the command line, with the same checksum verification as the app
+
 ### Removed
 
 - The Intel Mac build. macOS releases are for Apple silicon only from now on; 0.4.2 is the last version with

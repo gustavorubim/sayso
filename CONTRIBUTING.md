@@ -18,8 +18,10 @@ npm run dev
 | `npm run check` | Everything CI checks on the interface: formatting, lint, types, unit tests |
 | `npm run format` | Reformats the TypeScript and config files with Prettier |
 | `npm run typecheck` | Type-checks the Electron and React code |
-| `npm run test` | Runs the interface unit tests |
+| `npm run test` | Runs the interface tests |
 | `npm run core:test` | Runs the Rust unit tests |
+| `npm run core:test:audio` | Runs the audio regression tests; needs speech models, see [Tests](#tests) |
+| `npm run models:fetch -- --data-dir <folder> <model id>` | Downloads a model outside the app, checksums verified |
 | `npm run build` | Builds the Electron bundles into `out/` |
 | `npm run dist` | Builds an installer for your system into `dist/` |
 | `npm run pack:dir` then `npm run smoke` | Builds the unpacked app and runs its self-check, as CI does |
@@ -33,6 +35,46 @@ environment variable pointing at `cl.exe`. Remove it, or unset it for the sessio
 **"Electron uninstall" on `npm run dev`:** npm skipped Electron's download step. Run
 `node node_modules/electron/install.js` once.
 
+## Tests
+
+There are four kinds, and a change usually needs the first two.
+
+**Core unit tests** (`npm run core:test`) cover everything in the engine that needs no microphone or model: text
+clean-up, the request protocol, settings, the model catalog, download checksums, rewrite safety. They take a
+second. Add one for any logic you change.
+
+**Interface tests** (`npm run test`) render every screen against a simulated engine
+(`src/renderer/src/test/fake-core.ts`) and check what the interface asks the engine to do. If you add a control,
+add a test that uses it.
+
+**Audio regression tests** run real recordings (`core/tests/audio`) through real speech models and check
+accuracy, very short recordings, long recordings, other sample rates, silence, and writing as you speak. They
+are the only tests that can tell whether dictation got worse, so run them for any change to the engine, audio
+handling, or model settings:
+
+```bash
+npm run models:fetch -- --data-dir .speech-models canary-180m-flash whisper-large-v3-turbo
+```
+
+```bash
+SAYSO_TEST_DATA="$PWD/.speech-models" npm run core:test:audio
+```
+
+That is about 1.25 GB of models, downloaded once. CI runs exactly this on every pull request. To test other
+models, download them into the same folder; every model found there is tested unless `SAYSO_TEST_MODELS` names
+a subset.
+
+**Smoke test** (`npm run pack:dir`, then `npm run smoke`) builds the real app, starts it, and has it check
+itself. With `SAYSO_SMOKE_DATA=.speech-models` it also transcribes a recording through the packaged engine.
+
+Two rules that come from experience:
+
+- **Do not change a speech-model setting on the strength of a few clips.** Run `sayso-core bench --eval` on a
+  proper test set and the audio tests first. Version 0.4.0 shipped a Whisper setting that looked fine on two
+  clips and nearly doubled its error rate.
+- **When you add a setting,** add it to `tests/contract/settings-keys.json`. A test on each side fails until the
+  engine and the interface agree.
+
 ## Where things live
 
 | Path | Contents |
@@ -42,6 +84,8 @@ environment variable pointing at `cl.exe`. Remove it, or unset it for the sessio
 | `src/main/` | Electron main process: windows, tray, core process |
 | `src/renderer/` | React interface and the listening indicator |
 | `src/shared/types.ts` | Types for the core protocol, shared by all TypeScript code |
+| `core/tests/audio/` | Labelled recordings for the audio tests |
+| `tests/contract/` | Facts the engine and the interface must agree on |
 
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how the pieces talk to each other.
 
@@ -52,15 +96,16 @@ environment variable pointing at `cl.exe`. Remove it, or unset it for the sessio
 2. **Branch from `main`** using `type/short-description`, for example `feat/streaming-preview` or
    `fix/paste-on-wayland`.
 3. **Keep the pull request focused** on one change. Two unrelated fixes are two pull requests.
-4. **Add or update tests** for Rust logic that can be tested without hardware (text processing, catalog, parsing).
+4. **Add or update tests.** See [Tests](#tests): unit tests for logic, an interface test for a new control, and
+   the audio tests for anything that touches recognition.
 5. **Note user-facing changes** under "Unreleased" in [CHANGELOG.md](CHANGELOG.md).
 
 ## Pull request policy
 
 - **`main` is protected.** Nobody pushes to it directly; every change arrives through a pull request.
 - **CI must pass.** The "CI passed" check covers, for the Rust core, formatting, lints and tests; for the
-  interface, formatting, lint, type-check, unit tests and build; and a smoke test that builds the real app, starts
-  it, and has it check itself. Pull requests run on Linux and Windows; `main` and releases add macOS.
+  interface, formatting, lint, type-check, tests and build; the audio regression tests against real speech models;
+  and a smoke test that builds the real app, starts it, and has it transcribe a recording. Pull requests run on Linux and Windows; `main` and releases add macOS.
 - **One approving review** from a code owner is required. Authors don't approve their own work.
 - **Squash merge only.** The pull request title becomes the single commit on `main`.
 - **The title must be a [Conventional Commit](https://www.conventionalcommits.org)**; a check enforces this.

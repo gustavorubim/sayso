@@ -96,7 +96,7 @@ jobs:
   # runs, the windows load, the icons are there. This catches packaging mistakes that no
   # unit test can see. The checks are in src/main/smoke.ts.
   smoke:
-    name: Packaged app starts (${{ matrix.os }})
+    name: Packaged app starts and transcribes (${{ matrix.os }})
     needs: systems
     runs-on: ${{ matrix.os }}
     strategy:
@@ -138,19 +138,75 @@ jobs:
           codesign --verify --deep --strict --verbose=2 dist/mac*/Sayso.app
           codesign --display --verbose=2 dist/mac*/Sayso.app
 
-      - name: Start it and run its self-check
+      # A small speech model, so the packaged app can be asked to transcribe a real recording.
+      # It is downloaded once per system and kept until the model catalog changes.
+      - name: Restore the speech model
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/sayso-smoke-data
+          key: speech-smoke-${{ runner.os }}-${{ hashFiles('core/src/models.rs') }}
+
+      - name: Download the speech model (verified against its checksum)
+        run: npm run models:fetch -- --data-dir "${{ runner.temp }}/sayso-smoke-data" canary-180m-flash
+
+      - name: Start it, run its self-check, and transcribe a recording
         if: runner.os != 'Linux'
+        env:
+          SAYSO_SMOKE_DATA: ${{ runner.temp }}/sayso-smoke-data
         run: npm run smoke
 
-      - name: Start it and run its self-check (virtual display)
+      - name: Start it, run its self-check, and transcribe a recording (virtual display)
         if: runner.os == 'Linux'
+        env:
+          SAYSO_SMOKE_DATA: ${{ runner.temp }}/sayso-smoke-data
         run: xvfb-run --auto-servernum npm run smoke
+
+  # Real recordings through real speech models: accuracy, short recordings, long recordings,
+  # other sample rates, silence, and writing as you speak. This is what catches a change that
+  # makes dictation worse while every unit test still passes. See core/src/audio_tests.rs.
+  #
+  # Whisper Large v3 Turbo is here on purpose: the regression shipped in 0.4.0 showed on it
+  # and not on smaller Whisper models. Recognition does not depend on the operating system,
+  # so this runs on Linux only; the smoke test above covers each system's packaged engine.
+  audio:
+    name: Audio regression tests
+    runs-on: ubuntu-22.04
+    env:
+      SAYSO_TEST_DATA: ${{ github.workspace }}/.speech-models
+      SAYSO_TEST_MODELS: canary-180m-flash,whisper-large-v3-turbo
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Install Linux libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libx11-dev libxi-dev libxtst-dev libxdo-dev
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: core
+
+      - name: Restore the speech models
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .speech-models
+          key: speech-audio-${{ hashFiles('core/src/models.rs') }}
+
+      - name: Download the speech models (verified against their checksums)
+        run: >
+          cargo run --manifest-path core/Cargo.toml -- fetch --data-dir "$SAYSO_TEST_DATA"
+          canary-180m-flash whisper-large-v3-turbo
+
+      - name: Run the audio tests
+        run: cargo test --manifest-path core/Cargo.toml audio_tests -- --ignored --test-threads=1 --nocapture
 
   # One required status check for branch protection, whatever the matrix looks like.
   ci-ok:
     name: CI passed
     if: always()
-    needs: [interface, core, smoke]
+    needs: [interface, core, smoke, audio]
     runs-on: ubuntu-latest
     steps:
       - name: Check results

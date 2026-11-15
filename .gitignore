@@ -2,6 +2,7 @@ node_modules/
 out/
 dist/
 core/target/
+.speech-models/
 .scratch-data/
 *.log
 .DS_Store

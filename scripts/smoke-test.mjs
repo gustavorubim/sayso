@@ -9,9 +9,9 @@
 import { spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
-const TIMEOUT_MS = 90_000
+const TIMEOUT_MS = 180_000
 
 function findApp() {
   const dist = 'dist'
@@ -41,14 +41,24 @@ if (!exe) {
   process.exit(2)
 }
 
-const dataDir = mkdtempSync(join(tmpdir(), 'sayso-smoke-'))
-const resultFile = join(dataDir, 'result.json')
+// With SAYSO_SMOKE_DATA pointing at a folder prepared by `npm run models:fetch`, the app also
+// transcribes a real recording with a real model. Without it, that one check is skipped.
+const modelData = process.env.SAYSO_SMOKE_DATA
+const SMOKE_MODEL = 'canary-180m-flash'
+const recording = resolve('core/tests/audio/clips/clip-02.wav')
+if (modelData && !existsSync(join(modelData, 'models', SMOKE_MODEL))) {
+  console.error(`SAYSO_SMOKE_DATA is set, but ${SMOKE_MODEL} is not in ${join(modelData, 'models')}.`)
+  process.exit(2)
+}
+const dataDir = modelData ?? mkdtempSync(join(tmpdir(), 'sayso-smoke-'))
+const audio = modelData ? { SAYSO_SMOKE_AUDIO: recording, SAYSO_SMOKE_MODEL: SMOKE_MODEL } : {}
+const resultFile = join(mkdtempSync(join(tmpdir(), 'sayso-smoke-result-')), 'result.json')
 // Chromium's sandbox cannot start on CI's Linux containers; everything else runs as shipped.
 const args = process.platform === 'linux' && process.env.CI ? ['--no-sandbox'] : []
 
 console.log(`Starting ${exe}`)
 const child = spawn(exe, args, {
-  env: { ...process.env, SAYSO_SMOKE_TEST: '1', SAYSO_USER_DATA: dataDir, SAYSO_SMOKE_RESULT: resultFile },
+  env: { ...process.env, ...audio, SAYSO_SMOKE_TEST: '1', SAYSO_USER_DATA: dataDir, SAYSO_SMOKE_RESULT: resultFile },
   stdio: ['ignore', 'pipe', 'pipe']
 })
 let output = ''
@@ -74,7 +84,7 @@ child.on('exit', (code, signal) => {
   } catch {
     // no report: the app died before finishing
   }
-  rmSync(dataDir, { recursive: true, force: true })
+  if (!modelData) rmSync(dataDir, { recursive: true, force: true })
 
   if (!report) {
     console.error(`The app exited (code ${code}, signal ${signal}) without reporting. Its output:`)
@@ -83,7 +93,8 @@ child.on('exit', (code, signal) => {
   }
   console.log(`Sayso ${report.version} on ${report.platform}`)
   for (const r of report.results) {
-    console.log(`  ${r.ok ? 'ok  ' : 'FAIL'}  ${r.name}${r.detail ? ` — ${r.detail}` : ''}`)
+    const mark = !r.ok ? 'FAIL' : r.detail ? 'skip' : 'ok  '
+    console.log(`  ${mark}  ${r.name}${r.detail ? ` — ${r.detail}` : ''}`)
   }
   if (!report.ok || code !== 0) {
     console.error('\nSmoke test failed.')
