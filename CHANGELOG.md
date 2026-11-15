@@ -3,6 +3,12 @@
 Notable changes to Sayso. The format follows [Keep a Changelog](https://keepachangelog.com), and versions
 follow [Semantic Versioning](https://semver.org).
 
+## Unreleased
+
+### Added
+
+- A "Check for updates" button in the sidebar, under the version number
+
 ## 0.4.2
 
 ### Fixed
