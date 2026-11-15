@@ -85,6 +85,10 @@ fn download_model(app: &App, model: &ModelDef, total: u64, cancel: &AtomicBool) 
     for (name, size, sha256) in model.files {
         let dest = dir.join(name);
         if !dest.is_file() {
+            // Some models keep files in a subfolder (a tokenizer, for example).
+            if let Some(parent) = dest.parent() {
+                fs::create_dir_all(parent).map_err(|e| format!("Could not create the model folder: {e}"))?;
+            }
             let base = done_before;
             let expected = Expected { size: *size, sha256 };
             fetch(&model.file_url(name), &dest, &expected, cancel, &mut |n| {

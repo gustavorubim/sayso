@@ -21,8 +21,11 @@ struct Args {
     quick: bool,
     provider: String,
     sections: Option<Vec<String>>,
-    full_speed: bool,
+    background: bool,
     performance_cores: bool,
+    eval: Option<PathBuf>,
+    limit: usize,
+    whisper_padding: i32,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -32,8 +35,11 @@ fn parse_args() -> Result<Args, String> {
     let mut quick = false;
     let mut provider = "cpu".to_string();
     let mut sections = None;
-    let mut full_speed = false;
+    let mut background = false;
     let mut performance_cores = false;
+    let mut eval = None;
+    let mut limit = usize::MAX;
+    let mut whisper_padding = EngineOptions::default().whisper_tail_paddings;
     let mut args = std::env::args().skip(2);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -41,8 +47,13 @@ fn parse_args() -> Result<Args, String> {
             "--wav" => wav = args.next().map(PathBuf::from),
             "--models" => only = args.next().map(|s| s.split(',').map(str::to_string).collect()),
             "--quick" => quick = true,
-            "--full-speed" => full_speed = true,
+            "--background" => background = true,
             "--performance-cores" => performance_cores = true,
+            "--eval" => eval = args.next().map(PathBuf::from),
+            "--whisper-padding" => {
+                whisper_padding = args.next().and_then(|n| n.parse().ok()).unwrap_or(whisper_padding)
+            }
+            "--limit" => limit = args.next().and_then(|n| n.parse().ok()).unwrap_or(usize::MAX),
             "--provider" => provider = args.next().unwrap_or_default(),
             "--sections" => sections = args.next().map(|s| s.split(',').map(str::to_string).collect()),
             other => return Err(format!("unknown argument: {other}")),
@@ -55,8 +66,11 @@ fn parse_args() -> Result<Args, String> {
         quick,
         provider,
         sections,
-        full_speed,
+        background,
         performance_cores,
+        eval,
+        limit,
+        whisper_padding,
     })
 }
 
@@ -103,16 +117,30 @@ fn memory_mb() -> f64 {
 
 /// Word-level difference between two transcripts, as a fraction of the reference length.
 fn word_diff(reference: &str, other: &str) -> f64 {
+    let (errors, words) = word_errors(reference, other);
+    if words == 0 {
+        return if errors == 0 { 0.0 } else { 1.0 };
+    }
+    errors as f64 / words as f64
+}
+
+/// Word errors (substitutions, insertions, deletions) in `other`, and the number of words in
+/// `reference`. Case and punctuation are ignored.
+fn word_errors(reference: &str, other: &str) -> (usize, usize) {
     let norm = |s: &str| -> Vec<String> {
         s.to_lowercase()
             .split_whitespace()
-            .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+            .map(|w| {
+                w.chars()
+                    .filter(|c| c.is_alphanumeric() || *c == '\'')
+                    .collect::<String>()
+            })
             .filter(|w| !w.is_empty())
             .collect()
     };
     let (a, b) = (norm(reference), norm(other));
     if a.is_empty() {
-        return if b.is_empty() { 0.0 } else { 1.0 };
+        return (b.len(), 0);
     }
     // Levenshtein distance over words.
     let mut prev: Vec<usize> = (0..=b.len()).collect();
@@ -124,7 +152,7 @@ fn word_diff(reference: &str, other: &str) -> f64 {
         }
         prev = row;
     }
-    prev[b.len()] as f64 / a.len() as f64
+    (prev[b.len()], a.len())
 }
 
 struct Clip {
@@ -154,7 +182,11 @@ pub fn run() -> i32 {
             return 2;
         }
     };
-    if args.full_speed {
+    // The app always asks the system not to throttle the engine. Measure the same way, unless
+    // `--background` asks to see what an ordinary background process gets.
+    if args.background {
+        println!("# running as an ordinary background process");
+    } else {
         println!("# full speed requested: {}", crate::perf::request_full_speed());
     }
     if args.performance_cores {
@@ -204,6 +236,7 @@ pub fn run() -> i32 {
     let runs = if args.quick { 3 } else { 7 };
     let base = EngineOptions {
         provider: args.provider.clone(),
+        whisper_tail_paddings: args.whisper_padding,
         ..EngineOptions::default()
     };
     let wanted = |section: &str| {
@@ -230,6 +263,59 @@ pub fn run() -> i32 {
         "# models: {}",
         installed.iter().map(|m| m.id).collect::<Vec<_>>().join(", ")
     );
+
+    // ---- Accuracy on a labelled test set ----
+    // `--eval <dir>` holds pairs of files: `name.wav` and `name.txt` with the correct words.
+    // Reports the word error rate (errors per 100 reference words) and the speed for each
+    // model. Runs only when asked for, because it needs a test set.
+    if let Some(dir) = &args.eval {
+        let mut items: Vec<(Vec<f32>, String)> = Vec::new();
+        let mut names: Vec<PathBuf> = std::fs::read_dir(dir)
+            .map(|d| d.filter_map(|e| e.ok()).map(|e| e.path()).collect())
+            .unwrap_or_default();
+        names.sort();
+        for wav in names.iter().filter(|p| p.extension().is_some_and(|e| e == "wav")) {
+            if items.len() >= args.limit {
+                break;
+            }
+            let Ok(text) = std::fs::read_to_string(wav.with_extension("txt")) else {
+                continue;
+            };
+            let Some(wave) = sherpa_onnx::Wave::read(&wav.to_string_lossy()) else {
+                continue;
+            };
+            items.push((audio::resample(wave.samples(), wave.sample_rate() as u32), text));
+        }
+        let seconds: f64 = items.iter().map(|(a, _)| a.len() as f64 / SR as f64).sum();
+        println!(
+            "\n# accuracy set: {} recordings, {:.0} s of audio",
+            items.len(),
+            seconds
+        );
+        println!("## accuracy\tmodel\twer_pct\terrors\twords\ttime_s\ttimes_faster_than_real_time");
+        for model in &installed {
+            let Ok(engine) = load(model, &models_dir, &base) else {
+                println!("accuracy\t{}\tFAILED to load", model.id);
+                continue;
+            };
+            let _ = engine.transcribe(&items[0].0); // warm up
+            let (mut errors, mut words) = (0usize, 0usize);
+            let t = Instant::now();
+            for (samples, reference) in &items {
+                let (e, n) = word_errors(reference, &engine.transcribe(samples));
+                errors += e;
+                words += n;
+            }
+            let elapsed = t.elapsed().as_secs_f64();
+            println!(
+                "accuracy\t{}\t{:.2}\t{errors}\t{words}\t{elapsed:.1}\t{:.1}",
+                model.id,
+                100.0 * errors as f64 / words.max(1) as f64,
+                seconds / elapsed
+            );
+        }
+        return 0;
+    }
 
     // ---- 0. Stability: the same measurement on five freshly loaded engines ----
     // If these disagree, something outside the model (core scheduling, throttling) is deciding
