@@ -40,6 +40,23 @@ runs:
         workspaces: core
         shared-key: ${{ inputs.rust-cache }}
 
+    # The speech engine's build script downloads a prebuilt library into
+    # core/target/sherpa-onnx-prebuilt and skips the download when that folder exists. The
+    # build cache keeps the folder but not the files in it, so a restored cache can leave an
+    # empty folder that looks complete, and linking then fails with "could not find native
+    # static library". If the library is not really there, clear the folder and the build
+    # script's own record, so the script runs again and fetches it.
+    - name: Drop an incomplete speech engine from the cache
+      if: inputs.rust == 'true' && inputs.rust-cache != ''
+      shell: bash
+      run: |
+        prebuilt=core/target/sherpa-onnx-prebuilt
+        if [ -d "$prebuilt" ] && [ -z "$(find "$prebuilt" -type f \( -name '*.a' -o -name '*.lib' \) -print -quit)" ]; then
+          echo "The cached speech engine folder has no library in it; it will be fetched again."
+          rm -rf "$prebuilt"
+          rm -rf core/target/*/build/sherpa-onnx-sys-* core/target/*/.fingerprint/sherpa-onnx-sys-*
+        fi
+
     - if: inputs.node == 'true'
       uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:

@@ -21,12 +21,13 @@ fn system_prompt(instructions: &str) -> String {
 }
 
 fn agent(seconds: u64) -> ureq::Agent {
-    ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(10))
-        .timeout(Duration::from_secs(seconds))
+    ureq::Agent::config_builder()
+        .timeout_connect(Some(Duration::from_secs(10)))
+        .timeout_global(Some(Duration::from_secs(seconds)))
         .user_agent(concat!("sayso/", env!("CARGO_PKG_VERSION")))
         .https_only(true)
         .build()
+        .into()
 }
 
 /// Makes a model's reply safe to paste or type into whatever application has focus.
@@ -97,22 +98,29 @@ pub fn rewrite(key: &str, model: &str, instructions: &str, text: &str) -> Result
     });
     let response = agent(45)
         .post(CHAT_URL)
-        .set("Authorization", &format!("Bearer {key}"))
-        .set("HTTP-Referer", "https://github.com/gustavorubim/sayso")
-        .set("X-Title", "Sayso")
+        // An error status is read here, not turned into an error by the client, because
+        // OpenRouter explains what went wrong in the body of the reply.
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .header("Authorization", format!("Bearer {key}"))
+        .header("HTTP-Referer", "https://github.com/gustavorubim/sayso")
+        .header("X-Title", "Sayso")
         .send_json(body);
     match response {
-        Ok(r) => {
+        Ok(mut r) => {
+            let status = r.status().as_u16();
+            if status >= 400 {
+                let body: Value = r.body_mut().read_json().unwrap_or(Value::Null);
+                return Err(describe_status(status, &body, model));
+            }
             let value: Value = r
-                .into_json()
+                .body_mut()
+                .read_json()
                 .map_err(|e| format!("Could not read OpenRouter's reply: {e}"))?;
             sanitize(&extract(&value)?, text)
         }
-        Err(ureq::Error::Status(code, r)) => {
-            let body: Value = r.into_json().unwrap_or(Value::Null);
-            Err(describe_status(code, &body, model))
-        }
-        Err(ureq::Error::Transport(t)) => Err(format!("Could not reach OpenRouter. Check your connection. ({t})")),
+        Err(e) => Err(format!("Could not reach OpenRouter. Check your connection. ({e})")),
     }
 }
 
@@ -122,7 +130,10 @@ pub fn list_models() -> Result<Vec<String>, String> {
         .get(MODELS_URL)
         .call()
         .map_err(|e| format!("Could not load the model list from OpenRouter: {e}"))?
-        .into_json()
+        .body_mut()
+        .with_config()
+        .limit(50 * 1024 * 1024)
+        .read_json()
         .map_err(|e| format!("Could not read the model list: {e}"))?;
     let mut ids: Vec<String> = value["data"]
         .as_array()

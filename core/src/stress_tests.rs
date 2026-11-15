@@ -391,7 +391,10 @@ fn sha256(bytes: &[u8]) -> String {
 }
 
 fn download(server: &Server, dest: &Path, file: &[u8], cancel: &AtomicBool) -> Result<(), String> {
-    let agent = ureq::AgentBuilder::new().timeout_read(Duration::from_secs(10)).build();
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_per_read(Some(Duration::from_secs(10)))
+        .build()
+        .into();
     let checksum = sha256(file);
     let expected = Expected {
         size: file.len() as u64,
@@ -601,7 +604,7 @@ fn real_downloads_refuse_plain_http() {
         size: file.len() as u64,
         sha256: &checksum,
     };
-    let agent = ureq::AgentBuilder::new().https_only(true).build();
+    let agent: ureq::Agent = ureq::Agent::config_builder().https_only(true).build().into();
     let result = fetch_with(
         &agent,
         &server.url,
