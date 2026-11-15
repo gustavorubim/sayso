@@ -5,6 +5,10 @@ follow [Semantic Versioning](https://semver.org).
 
 ## Unreleased
 
+### Added
+
+- A "Check for updates" button in the sidebar, under the version number
+
 ### Removed
 
 - The Intel Mac build. macOS releases are for Apple silicon only from now on; 0.4.2 is the last version with

@@ -178,8 +178,20 @@ textarea {
   color: var(--muted);
 }
 
-.nav-foot span {
-  display: block;
+.nav-foot .link {
+  margin-top: 4px;
+  font-size: inherit;
+}
+
+.nav-foot .link:disabled {
+  color: var(--muted);
+  text-decoration: none;
+  cursor: default;
+}
+
+.nav-foot-note {
+  margin-top: 4px;
+  color: var(--ink);
 }
 
 .main {
