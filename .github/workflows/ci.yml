@@ -129,6 +129,15 @@ jobs:
       - name: Build the unpacked app
         run: npm run pack:dir
 
+      # macOS reports a downloaded app with a missing or broken signature as "damaged" and
+      # will not open it. Starting the app from a terminal, as the next step does, does not
+      # show that, so check the signature itself.
+      - name: Check the macOS signature
+        if: runner.os == 'macOS'
+        run: |
+          codesign --verify --deep --strict --verbose=2 dist/mac*/Sayso.app
+          codesign --display --verbose=2 dist/mac*/Sayso.app
+
       - name: Start it and run its self-check
         if: runner.os != 'Linux'
         run: npm run smoke

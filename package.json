@@ -19,15 +19,15 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "icons": "node scripts/make-icons.mjs",
-    "dist": "npm run core:release && npm run build && electron-builder --publish never",
-    "release": "npm run core:release && npm run build && electron-builder --publish always",
+    "dist": "npm run core:release && npm run build && node scripts/package.mjs --publish never",
+    "release": "npm run core:release && npm run build && node scripts/package.mjs --publish always",
     "version:set": "node scripts/set-version.mjs",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test",
-    "pack:dir": "npm run core:release && npm run build && electron-builder --dir --publish never",
+    "pack:dir": "npm run core:release && npm run build && node scripts/package.mjs --dir --publish never",
     "smoke": "node scripts/smoke-test.mjs"
   },
   "dependencies": {

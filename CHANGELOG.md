@@ -5,6 +5,11 @@ follow [Semantic Versioning](https://semver.org).
 
 ## Unreleased
 
+### Fixed
+
+- macOS no longer reports the downloaded app as "damaged": builds made without a Developer ID certificate are
+  now signed ad hoc, and CI checks the signature of the packaged app
+
 ### Changed
 
 - Releases are built only after the full check suite passes on the tagged commit
