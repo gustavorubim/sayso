@@ -1,6 +1,6 @@
 [package]
 name = "sayso-core"
-version = "0.4.0"
+version = "0.4.1"
 description = "Native core for Sayso: global hotkey, audio capture, local speech-to-text, and paste."
 license = "MIT"
 edition = "2021"
