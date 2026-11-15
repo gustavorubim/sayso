@@ -199,12 +199,16 @@ fn fetch(
 
 /// The client for real downloads: HTTPS only.
 fn https_agent() -> ureq::Agent {
-    ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(20))
-        .timeout_read(Duration::from_secs(60))
+    // No limit on the whole download, which can be gigabytes on a slow line; but a
+    // connection that goes quiet for a minute is given up on.
+    ureq::Agent::config_builder()
+        .timeout_connect(Some(Duration::from_secs(20)))
+        .timeout_recv_response(Some(Duration::from_secs(60)))
+        .timeout_per_read(Some(Duration::from_secs(60)))
         .user_agent(concat!("sayso/", env!("CARGO_PKG_VERSION")))
         .https_only(true)
         .build()
+        .into()
 }
 
 pub(crate) fn fetch_with(
@@ -228,12 +232,12 @@ pub(crate) fn fetch_with(
 
     let mut request = agent.get(url);
     if existing > 0 {
-        request = request.set("Range", &format!("bytes={existing}-"));
+        request = request.header("Range", format!("bytes={existing}-"));
     }
     let response = match request.call() {
         Ok(r) => r,
         // The .part file is already complete or stale: start over.
-        Err(ureq::Error::Status(416, _)) => {
+        Err(ureq::Error::StatusCode(416)) => {
             let _ = fs::remove_file(&part);
             agent.get(url).call().map_err(describe)?
         }
@@ -253,10 +257,20 @@ pub(crate) fn fetch_with(
     let mut hasher = Sha256::new();
     if resumed {
         let mut earlier = File::open(&part).map_err(|e| format!("Could not read the partial download: {e}"))?;
-        std::io::copy(&mut earlier, &mut hasher).map_err(|e| format!("Could not read the partial download: {e}"))?;
+        let mut chunk = vec![0u8; 256 * 1024];
+        loop {
+            let n = earlier
+                .read(&mut chunk)
+                .map_err(|e| format!("Could not read the partial download: {e}"))?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&chunk[..n]);
+        }
     }
     let mut downloaded = if resumed { existing } else { 0 };
-    let mut reader = response.into_reader();
+    // The size is checked below as the bytes arrive, so the reader itself has no limit.
+    let mut reader = response.into_body().into_reader();
     let mut buf = vec![0u8; 256 * 1024];
     loop {
         if cancel.load(Ordering::SeqCst) {
@@ -290,7 +304,7 @@ pub(crate) fn fetch_with(
 
 fn describe(e: ureq::Error) -> String {
     match e {
-        ureq::Error::Status(code, _) => format!("Hugging Face answered with HTTP {code}."),
-        ureq::Error::Transport(t) => format!("Could not reach Hugging Face. Check your connection. ({t})"),
+        ureq::Error::StatusCode(code) => format!("Hugging Face answered with HTTP {code}."),
+        other => format!("Could not reach Hugging Face. Check your connection. ({other})"),
     }
 }
