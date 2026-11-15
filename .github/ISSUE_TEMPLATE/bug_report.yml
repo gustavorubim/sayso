@@ -32,7 +32,7 @@ body:
     id: model
     attributes:
       label: Speech model in use
-      placeholder: Parakeet TDT 0.6B v3
+      placeholder: Parakeet Ultra
   - type: input
     id: target
     attributes:
