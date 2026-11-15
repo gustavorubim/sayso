@@ -38,6 +38,50 @@ export interface AppState {
 
 const RELEASES_URL = 'https://github.com/gustavorubim/sayso/releases/latest'
 
+/**
+ * The always-visible way to ask "is there a new version?". The app also checks by itself;
+ * this is for when you don't want to wait. Anything it finds shows up in `UpdateNotice`.
+ */
+function UpdateCheck({ onResult }: { onResult: (state: UpdateState) => void }): React.JSX.Element {
+  const [checking, setChecking] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!message) return
+    const timer = window.setTimeout(() => setMessage(null), 8000)
+    return () => window.clearTimeout(timer)
+  }, [message])
+
+  const check = async (): Promise<void> => {
+    setChecking(true)
+    setMessage(null)
+    try {
+      const result = await window.stt.checkForUpdates()
+      onResult(result)
+      // A found update is announced by the notice above; only the other outcomes need words here.
+      if (result.message) setMessage(result.message)
+      else if (result.state === 'none') setMessage('You have the latest version.')
+    } catch (err) {
+      setMessage(errorText(err))
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  return (
+    <>
+      <button type="button" className="link" disabled={checking} onClick={() => void check()}>
+        {checking ? 'Checking…' : 'Check for updates'}
+      </button>
+      {message && (
+        <p className="nav-foot-note" role="status">
+          {message}
+        </p>
+      )}
+    </>
+  )
+}
+
 function UpdateNotice({ update }: { update: UpdateState }): React.JSX.Element | null {
   if (update.state === 'none' || !update.version) return null
   return (
@@ -206,10 +250,11 @@ export function App(): React.JSX.Element {
           ))}
         </ul>
         <UpdateNotice update={appUpdate} />
-        <p className="nav-foot">
-          Your audio never leaves this computer.
-          {version && <span>Version {version}</span>}
-        </p>
+        <div className="nav-foot">
+          <p>Your audio never leaves this computer.</p>
+          {version && <p>Version {version}</p>}
+          <UpdateCheck onResult={setAppUpdate} />
+        </div>
       </nav>
 
       <main className="main">
