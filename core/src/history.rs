@@ -26,7 +26,7 @@ pub fn load(path: &Path) -> Vec<HistoryItem> {
 
 pub fn save(path: &Path, items: &[HistoryItem]) {
     if let Ok(json) = serde_json::to_string(items) {
-        if let Err(e) = std::fs::write(path, json) {
+        if let Err(e) = crate::settings::write_atomically(path, json.as_bytes()) {
             eprintln!("could not save history: {e}");
         }
     }

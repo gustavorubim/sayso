@@ -25,6 +25,7 @@ npm run dev
 | `npm run build` | Builds the Electron bundles into `out/` |
 | `npm run dist` | Builds an installer for your system into `dist/` |
 | `npm run pack:dir` then `npm run smoke` | Builds the unpacked app and runs its self-check, as CI does |
+| `npm run stress:core` | Floods, kills and restarts the engine process; see [Tests](#tests) |
 | `npm run icons` | Regenerates the app icons |
 
 For Rust formatting and lints, from `core/`: `cargo fmt` and `cargo clippy --all-targets -- -D warnings`.
@@ -37,7 +38,7 @@ environment variable pointing at `cl.exe`. Remove it, or unset it for the sessio
 
 ## Tests
 
-There are four kinds, and a change usually needs the first two.
+There are five kinds, and a change usually needs the first two.
 
 **Core unit tests** (`npm run core:test`) cover everything in the engine that needs no microphone or model: text
 clean-up, the request protocol, settings, the model catalog, download checksums, rewrite safety. They take a
@@ -65,7 +66,33 @@ models, download them into the same folder; every model found there is tested un
 a subset.
 
 **Smoke test** (`npm run pack:dir`, then `npm run smoke`) builds the real app, starts it, and has it check
-itself. With `SAYSO_SMOKE_DATA=.speech-models` it also transcribes a recording through the packaged engine.
+itself. With `SAYSO_SMOKE_DATA=.speech-models` it also transcribes a recording through the packaged engine. Its
+last check kills the engine and expects the app to bring it back.
+
+**Stress tests** ask what happens when things are done many times, at once, or go wrong. They come in three
+parts:
+
+- The ones that need no model run with every `npm run core:test` (`core/src/stress_tests.rs`): requests from
+  many threads at once, hundreds of malformed requests, a settings file read while it is being rewritten, and
+  downloads that are cut off, corrupted, oversized or cancelled, against a small web server inside the test.
+- The ones that need models dictate hundreds of times in a row and watch memory, switch models back and
+  forth, transcribe a ten-minute recording, and feed the engine audio no microphone should produce. They take
+  a few minutes, so CI runs them on every push to `main` and before every release, not on pull requests:
+
+  ```bash
+  SAYSO_TEST_DATA="$PWD/.speech-models" cargo test --manifest-path core/Cargo.toml stress_tests -- --ignored --test-threads=1 --nocapture
+  ```
+
+- `npm run stress:core` works on the engine from outside, the way the app does. It uses the engine inside the
+  packaged app in `dist/` when there is one (set `SAYSO_CORE` to point it at another build). It sends thousands
+  of requests mixed with junk, kills the engine 25 times in the middle of saving settings and checks they
+  survive, and with `SAYSO_SMOKE_DATA` set transcribes the same recording 40 times. CI runs it after the smoke
+  test on each system.
+
+When a stress test finds something, fix the cause and keep the test. The first run of these found four real
+faults: settings lost when the engine was killed mid-save, a crash on recordings shorter than one audio frame, a
+request that could hang the engine forever on Windows, and an engine that was not restarted after its third
+crash of the day.
 
 Two rules that come from experience:
 
@@ -104,8 +131,9 @@ Two rules that come from experience:
 
 - **`main` is protected.** Nobody pushes to it directly; every change arrives through a pull request.
 - **CI must pass.** The "CI passed" check covers, for the Rust core, formatting, lints and tests; for the
-  interface, formatting, lint, type-check, tests and build; the audio regression tests against real speech models;
-  and a smoke test that builds the real app, starts it, and has it transcribe a recording. Pull requests run on Linux and Windows; `main` and releases add macOS.
+  interface, formatting, lint, type-check and tests; the audio regression tests against real speech models;
+  and a packaged-app test that builds the real app, starts it, has it transcribe a recording, and stresses its
+  engine. Pull requests run on Linux and Windows; `main` and releases add macOS and the slow stress tests.
 - **One approving review** from a code owner is required. Authors don't approve their own work.
 - **Squash merge only.** The pull request title becomes the single commit on `main`.
 - **The title must be a [Conventional Commit](https://www.conventionalcommits.org)**; a check enforces this.
@@ -153,10 +181,18 @@ Maintainers cut releases; the pipeline does the building.
 2. Move the "Unreleased" notes in `CHANGELOG.md` under a `0.2.0` heading.
 3. Open a pull request titled `chore: release 0.2.0` and merge it.
 4. Tag the merge commit: `git tag v0.2.0 && git push origin v0.2.0`.
-5. The **Release** workflow first runs the whole CI suite on the tagged commit, including the smoke test on all
-   three systems. Only if that passes does it build installers for Windows, macOS (Apple silicon) and Linux and attaches them
-   to a draft release with generated notes.
+5. The **Release** workflow first runs the unit, audio and stress tests on the tagged commit. Then each system
+   builds its installers once, and the app from that same build is started, checks itself, transcribes a
+   recording and has its engine stressed. Only installers that passed are attached to a draft release with
+   generated notes, so what is published is what was tested.
 6. Try an installer, edit the notes if needed, and publish the draft.
+
+### Rehearsing a release
+
+To check that a release would succeed without making one, run the Release workflow by hand: Actions, Release,
+"Run workflow", or `gh workflow run Release`. Everything above happens on the chosen branch, nothing is
+published, and the installers are kept as workflow artifacts for three days. Do this after any change to the
+workflows, the packaging configuration or the speech engine version.
 
 ### Beta releases
 

@@ -220,6 +220,24 @@ impl Engine {
     }
 
     fn decode(&self, samples: &[f32]) -> String {
+        // A driver glitch can produce infinities or not-a-number, and nothing good comes of
+        // feeding those to a neural network. Audio is also expected within -1..1.
+        let cleaned;
+        let samples = if samples.iter().any(|s| !s.is_finite() || s.abs() > 1.0) {
+            cleaned = samples
+                .iter()
+                .map(|s| if s.is_finite() { s.clamp(-1.0, 1.0) } else { 0.0 })
+                .collect::<Vec<f32>>();
+            &cleaned[..]
+        } else {
+            samples
+        };
+        // Less than a tenth of a second holds no word, and some models crash outright when
+        // given fewer samples than one analysis window (a tap on the shortcut, or the last
+        // sliver of a long recording cut into pieces).
+        if samples.len() < SAMPLE_RATE as usize / 10 {
+            return String::new();
+        }
         let stream = self.recognizer.create_stream();
         stream.accept_waveform(SAMPLE_RATE as i32, samples);
         self.recognizer.decode(&stream);

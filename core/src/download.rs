@@ -23,7 +23,7 @@ struct Progress<'a> {
     error: Option<String>,
 }
 
-const CANCELLED: &str = "cancelled";
+pub(crate) const CANCELLED: &str = "cancelled";
 
 pub fn start(app: Arc<App>, id: &str) -> Result<(), String> {
     let model = models::find(id).ok_or_else(|| format!("Unknown model: {id}"))?;
@@ -176,18 +176,39 @@ fn download_model(app: &App, model: &ModelDef, total: u64, cancel: &AtomicBool) 
 }
 
 /// What a downloaded file must be: its exact size and SHA-256.
-struct Expected<'a> {
-    size: u64,
-    sha256: &'a str,
+pub(crate) struct Expected<'a> {
+    pub size: u64,
+    pub sha256: &'a str,
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// Downloads `url` to `dest` through a `.part` file, resuming if one exists. The finished
 /// file is only kept if it matches `expected`.
 fn fetch(
+    url: &str,
+    dest: &Path,
+    expected: &Expected,
+    cancel: &AtomicBool,
+    on_bytes: &mut dyn FnMut(u64),
+) -> Result<(), String> {
+    fetch_with(&https_agent(), url, dest, expected, cancel, on_bytes)
+}
+
+/// The client for real downloads: HTTPS only.
+fn https_agent() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(20))
+        .timeout_read(Duration::from_secs(60))
+        .user_agent(concat!("sayso/", env!("CARGO_PKG_VERSION")))
+        .https_only(true)
+        .build()
+}
+
+pub(crate) fn fetch_with(
+    agent: &ureq::Agent,
     url: &str,
     dest: &Path,
     expected: &Expected,
@@ -205,12 +226,6 @@ fn fetch(
         existing = 0;
     }
 
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(20))
-        .timeout_read(Duration::from_secs(60))
-        .user_agent(concat!("sayso/", env!("CARGO_PKG_VERSION")))
-        .https_only(true)
-        .build();
     let mut request = agent.get(url);
     if existing > 0 {
         request = request.set("Range", &format!("bytes={existing}-"));

@@ -107,6 +107,29 @@ export async function runSmokeTest({ core, mainWindow, overlay, iconPaths }: Con
     [
       'the interface cannot start a recording',
       () => waitFor(mainWindow, "window.stt.call('toggle_recording').then(() => false, () => true)", 5_000)
+    ],
+    [
+      // Last, because it kills the engine: the app must bring it back by itself, with the
+      // settings it had, and the interface must be able to use it again.
+      'the engine comes back after a crash',
+      async () => {
+        const before = await core.call<Settings>('get_settings')
+        const restarted = new Promise<void>((resolve) => core.once('started', () => resolve()))
+        core.crashForTest()
+        const inTime = await Promise.race([
+          restarted.then(() => true),
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 15_000))
+        ])
+        if (!inTime) return 'the engine was not restarted within 15 s'
+        const after = await core.call<Settings>('get_settings')
+        if (JSON.stringify(after) !== JSON.stringify(before)) return 'settings changed across the restart'
+        const reachable = await waitFor(
+          mainWindow,
+          "window.stt.call('list_models').then((m) => m.length >= 7, () => false)",
+          10_000
+        )
+        return reachable || 'the interface could not reach the restarted engine'
+      }
     ]
   ]
 
